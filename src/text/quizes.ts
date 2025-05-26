@@ -173,15 +173,41 @@ const quizes = () => async (ctx: Context) => {
 
     try {
       const allQuestions = await fetchQuestions();
-      const filteredByChapter = allQuestions.filter(
-        (q: any) => q.chapter?.toLowerCase().trim() === chapterName.toLowerCase()
-      );
+      // Utility to calculate a basic word-match score
+const getSimilarityScore = (input: string, target: string): number => {
+  const inputWords = input.toLowerCase().split(/\s+/);
+  const targetWords = target.toLowerCase().split(/\s+/);
+  const common = inputWords.filter(word => targetWords.includes(word));
+  return common.length / Math.max(inputWords.length, targetWords.length);
+};
 
+// Get all unique chapters
+const chapters = getUniqueChapters(await fetchQuestions());
+
+// Find best matched chapter
+const matchedChapter = chapters
+  .map(ch => ({ name: ch, score: getSimilarityScore(chapterName, ch) }))
+  .sort((a, b) => b.score - a.score)[0];
+
+// If the score is too low, consider it invalid
+if (!matchedChapter || matchedChapter.score < 0.3) {
+  const { message } = await getChaptersMessage();
+  await ctx.replyWithHTML(
+    `❌ Could not find a matching chapter for "<b>${chapterName}</b>"\n\n${message}`
+  );
+  return;
+}
+
+// Now fetch questions using the matched chapter
+const finalChapter = matchedChapter.name;
+const filteredByChapter = allQuestions.filter(
+  (q: any)
+    
       if (!filteredByChapter.length) {
         const { message } = await getChaptersMessage();
         await ctx.replyWithHTML(
-          `❌ No questions found for chapter "<b>${chapterName}</b>"\n\n${message}`
-        );
+  `❌ No exact match found for "<b>${chapterName}</b>"\n\nClosest match: <b>${matchedChapter.name}</b>\n\n${message}`
+);
         return;
       }
 
