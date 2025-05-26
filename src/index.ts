@@ -221,8 +221,8 @@ bot.command('reply', async (ctx) => {
   }
 });
 
-// --- COMMANDS ---
-bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?|addBiologyNew/, async (ctx) => {
+// Handle /add<subject> or /add<Subject>__<Chapter> commands
+bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
   }
@@ -232,82 +232,56 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?|addBiologyNew/, async (ctx) => {
   const count = parseInt(countStr, 10);
 
   if (!countStr || isNaN(count) || count <= 0) {
-    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10 or /addBiologyNew 10');
+    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
   }
 
   let subject = '';
   let chapter = 'Random';
-  let awaitingChapterSelection = false;
-  let awaitingChapterName = false;
 
-  if (command === 'addBiologyNew') {
-    subject = 'Biology';
-    awaitingChapterName = true; // Prompt for manual chapter name
-  } else if (command.includes('__')) {
+  if (command.includes('__')) {
     const [subj, chp] = command.split('__');
     subject = subj.replace('add', '').replace(/_/g, ' ');
     chapter = chp.replace(/_/g, ' ');
   } else {
     subject = command.replace('add', '').replace(/_/g, ' ');
-    awaitingChapterSelection = true; // Prompt for chapter selection by number
   }
 
-  if (awaitingChapterName) {
-    pendingSubmissions[ctx.from.id] = {
-      subject,
-      chapter: '',
-      count,
-      questions: [],
-      expectingImageFor: undefined,
-      awaitingChapterName: true,
-    };
-    await ctx.reply(`Please enter the chapter name for *${subject}*.`, { parse_mode: 'Markdown' });
-    return;
+  // Fetch chapters for the subject
+  const chapters = await fetchChapters(subject);
+  if (chapters.length === 0) {
+    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
   }
 
-  if (awaitingChapterSelection) {
-    // Fetch chapters for the subject
-    const chapters = await fetchChapters(subject);
-    if (chapters.length === 0) {
-      return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
-    }
+  // Create numbered list of chapters
+  const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
+  const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
+  const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
 
-    // Create numbered list of chapters
-    const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
-    const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
-    const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
+  // Store pending submission with flag for chapter selection
+  pendingSubmissions[ctx.from.id] = {
+    subject,
+    chapter,
+    count,
+    questions: [],
+    expectingImageFor: undefined,
+    awaitingChapterSelection: true,
+  };
 
-    // Store pending submission with flag for chapter selection
-    pendingSubmissions[ctx.from.id] = {
-      subject,
-      chapter,
-      count,
-      questions: [],
-      expectingImageFor: undefined,
-      awaitingChapterSelection: true,
-    };
+  const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
+                    (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
+  await ctx.reply(replyText, { parse_mode: 'Markdown' });
+});
 
-    const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
-                      (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
-    await ctx.reply(replyText, { parse_mode: 'Markdown' });
-  } else {
-    // For commands like /addBiology__ChapterName
-    pendingSubmissions[ctx.from.id] = {
-      subject,
-      chapter,
-      count,
-      questions: [],
-      expectingImageFor: undefined,
-    };
-    await ctx.reply(
-      `Selected chapter: *${chapter}* for *${subject}*. ` +
-      `Please share ${count} questions as Telegram quiz polls. ` +
-      `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
-      `After sending a poll, you can optionally send an image URL for it.`,
-      { parse_mode: 'Markdown' }
-    );
+// User greeting and message handling
+bot.start(async (ctx) => {
+  if (isPrivateChat(ctx.chat.type)) {
+    await ctx.reply('Welcome! Use /help to explore commands.');
+    await greeting()(ctx);
   }
 });
+
+// Handle button clicks (quiz)
+bot.on('callback_query', handleQuizActions());
 
 // --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
@@ -368,22 +342,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle chapter name input for /addBiologyNew
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterName && msg.text) {
-    const submission = pendingSubmissions[chat.id];
-    submission.chapter = msg.text.trim();
-    submission.awaitingChapterName = false;
-
-    await ctx.reply(
-      `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
-      `Please share ${submission.count} questions as Telegram quiz polls. ` +
-      `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
-      `After sending a poll, you can optionally send an image URL for it.`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
   // Handle chapter selection for admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
     const submission = pendingSubmissions[chat.id];
@@ -423,7 +381,11 @@ bot.on('message', async (ctx) => {
       return;
     }
 
-    const explanation = poll.explanation || 'Join @EduhubKMR_bot'; // Default explanation
+    if (!poll.explanation) {
+      await ctx.reply('Quiz polls must include an explanation.');
+      return;
+    }
+
     const correctOptionIndex = poll.correct_option_id;
     const correctOptionLetter = ['A', 'B', 'C', 'D'][correctOptionIndex];
 
@@ -438,7 +400,7 @@ bot.on('message', async (ctx) => {
         D: poll.options[3].text,
       },
       correct_option: correctOptionLetter,
-      explanation,
+      explanation: poll.explanation,
       image: '',
     };
 
@@ -535,7 +497,8 @@ bot.on('message', async (ctx) => {
   if (isPrivateChat(chatType)) {
     await greeting()(ctx);
   }
-}); 
+});
+
 // --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
   await production(req, res, bot);
