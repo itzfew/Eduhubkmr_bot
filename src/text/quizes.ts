@@ -9,16 +9,13 @@ const quizes = () => async (ctx: Context) => {
   if (!ctx.message || !('text' in ctx.message)) return;
 
   const text = ctx.message.text.trim().toLowerCase();
-
-  // Match like /b cell 3 or /pyqb cell 2
-  const match = text.match(/^\/(pyq(b|c|p)?|[bcp])(?:\s+(.+?))?(?:\s+(\d+))?$/);
+  const match = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
 
   if (!match) return;
 
-  const cmd = match[1]; // pyq, pyqb, b, c, p
-  const subjectCode = match[2] || match[1]; // b, c, p
-  const chapterQuery = match[3]?.trim(); // e.g., "cell"
-  const count = match[4] ? parseInt(match[4].trim(), 10) : 1;
+  const cmd = match[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
+  const subjectCode = match[2]; // b, c, p
+  const count = match[3] ? parseInt(match[3].trim(), 10) : 1;
 
   const subjectMap: Record<string, string> = {
     b: 'biology',
@@ -26,24 +23,27 @@ const quizes = () => async (ctx: Context) => {
     p: 'physics',
   };
 
-  const subject = subjectMap[subjectCode];
-  const isMixed = cmd === 'pyq';
+  let subject: string | null = null;
+  let isMixed = false;
+
+  if (cmd === 'pyq') {
+    isMixed = true;
+  } else if (subjectCode) {
+    subject = subjectMap[subjectCode];
+  } else if (['b1', 'c1', 'p1'].includes(cmd)) {
+    subject = subjectMap[cmd[0]];
+  }
 
   try {
     const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/master/quiz.json');
     const allQuestions = await response.json();
 
-    let filtered = isMixed ? allQuestions : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
-
-    if (chapterQuery) {
-      const query = chapterQuery.toLowerCase();
-      filtered = filtered.filter((q: any) =>
-        q.chapter?.toLowerCase().includes(query)
-      );
-    }
+    let filtered = isMixed
+      ? allQuestions
+      : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
 
     if (!filtered.length) {
-      await ctx.reply(`No questions found for ${subject}${chapterQuery ? `, chapter matching "${chapterQuery}"` : ''}.`);
+      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
       return;
     }
 
