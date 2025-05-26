@@ -1,7 +1,7 @@
 [
   {
     "subject": "Biology",
-    "chapter": "Cell - The Unit of Life",
+    "chapter": "Cell   The Unit of Life",
     "question": "Which organelle is known as the 'powerhouse of the cell'?",
     "options": {
       "A": "Nucleus",
@@ -18,13 +18,13 @@
     "chapter": "Plant Kingdom",
     "question": "Which of the following is a characteristic of monocot plants?",
     "options": {
-      "A": "Net-veined leaves",
+      "A": "Net veined leaves",
       "B": "Two cotyledons",
-      "C": "Parallel-veined leaves",
+      "C": "Parallel veined leaves",
       "D": "Tap root system"
     },
     "correct_option": "C",
-    "explanation": "Monocot plants typically have parallel-veined leaves, one cotyledon, and a fibrous root system.",
+    "explanation": "Monocot plants typically have parallel veined leaves, one cotyledon, and a fibrous root system.",
     "image": ""
   },
   {
@@ -85,7 +85,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "Cell - The Unit of Life",
+    "chapter": "Cell   The Unit of Life",
     "question": "What is the primary function of the large intestine?",
     "options": {
       "A": "Nutrient absorption",
@@ -142,7 +142,7 @@
   {
     "subject": "Biology",
     "chapter": "biomolecules",
-    "question": "A non-proteinaceous enzyme is",
+    "question": "A non proteinaceous enzyme is",
     "options": {
       "A": "Iysozyme",
       "B": "ribozyme",
@@ -155,7 +155,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "body-fluids-and-its-circulation",
+    "chapter": "body fluids and its circulation",
     "question": "Name the blood cells, whose reduction in number can cause clotting disorder, leading to excessive loss of blood from the body.",
     "options": {
       "A": "Erythrocytes",
@@ -169,7 +169,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "body-fluids-and-its-circulation",
+    "chapter": "body fluids and its circulation",
     "question": "Erythropoiesis starts in",
     "options": {
       "A": "spleen",
@@ -183,7 +183,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "reproductive-health",
+    "chapter": "reproductive health",
     "question": "Embryo with more than 16 blastgomeres formed due to in vitro fertilization is transferred into",
     "options": {
       "A": "fimbriae",
@@ -192,12 +192,12 @@
       "D": "fallopian tube"
     },
     "correct_option": "C",
-    "explanation": "Embryo with more than 16 blastomeres is transferred into the uterus (intra-uterine transfer, IUT).",
+    "explanation": "Embryo with more than 16 blastomeres is transferred into the uterus (intra uterine transfer, IUT).",
     "image": ""
   },
   {
     "subject": "Biology",
-    "chapter": "biodiversity-and-conservation",
+    "chapter": "biodiversity and conservation",
     "question": "The region of Biosphere Reserve which is legally protected and where no human activity is allowed is known as :",
     "options": {
       "A": "Transition zone",
@@ -211,7 +211,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "sexual-reproduction-in-flowering-plants",
+    "chapter": "sexual reproduction in flowering plants",
     "question": "Which one of the following may require pollinators, but is genetically similar to autogamy?",
     "options": {
       "A": "Apogamy",
@@ -225,7 +225,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "chemical-coordination-and-integration",
+    "chapter": "chemical coordination and integration",
     "question": "A chemical signal that has both endocrine and neural roles is",
     "options": {
       "A": "epinephrine",
@@ -239,7 +239,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "morphology-of-flowering-plants",
+    "chapter": "morphology of flowering plants",
     "question": "Which of the following statement is not correct?",
     "options": {
       "A": "The rhizome is thick, prostrate and branched",
@@ -248,7 +248,7 @@
       "D": "The rhizome is aerial with no distinct nodes and internodes"
     },
     "correct_option": "D",
-    "explanation": "Rhizome is an underground (sub-aerial) stem. It bears distinct nodes and internodes.",
+    "explanation": "Rhizome is an underground (sub aerial) stem. It bears distinct nodes and internodes.",
     "image": ""
   },
   {
@@ -267,13 +267,13 @@
   },
   {
     "subject": "Biology",
-    "chapter": "locomotion-and-movement",
-    "question": "The H-zone in the skeletal muscle fibre is due to",
+    "chapter": "locomotion and movement",
+    "question": "The H zone in the skeletal muscle fibre is due to",
     "options": {
-      "A": "the central gap between actin filaments extending through myosin filaments in the A-bond",
-      "B": "extension of myosin filaments in the central portion of the A-band",
-      "C": "the absence of myofibrils in the central portion of A-band",
-      "D": "the central gap between myosin filaments in the A-band."
+      "A": "the central gap between actin filaments extending through myosin filaments in the A bond",
+      "B": "extension of myosin filaments in the central portion of the A band",
+      "C": "the absence of myofibrils in the central portion of A band",
+      "D": "the central gap between myosin filaments in the A band."
     },
     "correct_option": "A",
     "explanation": "Central part of thick filament, not overlapped by thin filaments is called the 'H' zone. 'H' zone is also called Hensen's Line.",
@@ -281,21 +281,21 @@
   },
   {
     "subject": "Biology",
-    "chapter": "principles-of-inheritance-and-variation",
+    "chapter": "principles of inheritance and variation",
     "question": "Among the following characters, which one was not considered by Mendel in his experiments on pea?",
     "options": {
-      "A": "Stem-Tall or dwarf",
-      "B": "Pod-Inflated or constricted",
-      "C": "Trichomes-Glandular or non-glandular",
-      "D": "Seed-Green or yellow"
+      "A": "Stem Tall or dwarf",
+      "B": "Pod Inflated or constricted",
+      "C": "Trichomes Glandular or non glandular",
+      "D": "Seed Green or yellow"
     },
     "correct_option": "C",
-    "explanation": "During his experiments Mendel have taken seven characters in a pea plant. In which nature of trichomes i.e., glandular or non-glandular was not considered by Mendel.",
+    "explanation": "During his experiments Mendel have taken seven characters in a pea plant. In which nature of trichomes i.e., glandular or non glandular was not considered by Mendel.",
     "image": ""
   },
   {
     "subject": "Biology",
-    "chapter": "plant-kingdom",
+    "chapter": "plant kingdom",
     "question": "Select the correct statement",
     "options": {
       "A": "*Sequoia* is one of the tallest trees.",
@@ -309,7 +309,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "cell-the-unit-of-life",
+    "chapter": "cell the unit of life",
     "question": "Which type of substance would face difficulty to pass through the cell membrane?",
     "options": {
       "A": "Substance soluble in lipids",
@@ -323,10 +323,10 @@
   },
   {
     "subject": "Biology",
-    "chapter": "animal-kingdom",
+    "chapter": "animal kingdom",
     "question": "Metagenesis refers to",
     "options": {
-      "A": "occurrence of a drastic change in form during post-embryonic development",
+      "A": "occurrence of a drastic change in form during post embryonic development",
       "B": "presence of a segmented body and parthenogenetic mode of reproduction",
       "C": "presence of different morphic forms",
       "D": "alternation of generation between asexual and sexual phases of an organisms."
@@ -337,7 +337,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "animal-kingdom",
+    "chapter": "animal kingdom",
     "question": "Which group of animals belong to the same phylum?",
     "options": {
       "A": "Prawn, Scorpion, *Locusta*",
@@ -351,7 +351,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "sexual-reproduction-in-flowering-plants",
+    "chapter": "sexual reproduction in flowering plants",
     "question": "Double fertilisation is exhibited by",
     "options": {
       "A": "algae",
@@ -365,7 +365,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "biological-classification",
+    "chapter": "biological classification",
     "question": "The imperfect fungi which are decomposers of litter and help in mineral cycling belong to",
     "options": {
       "A": "Ascomycetes",
@@ -379,7 +379,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "organisms-and-populations",
+    "chapter": "organisms and populations",
     "question": "The term 'niche' refers to",
     "options": {
       "A": "an organism's role in an ecosystem",
@@ -393,7 +393,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "human-health-and-disease",
+    "chapter": "human health and disease",
     "question": "Which one of the following is a viral disease?",
     "options": {
       "A": "Typhoid",
@@ -407,7 +407,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "photosynthesis-in-higher-plants",
+    "chapter": "photosynthesis in higher plants",
     "question": "Which of the following is a C4 plant?",
     "options": {
       "A": "Wheat",
@@ -421,7 +421,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "plant-growth-and-development",
+    "chapter": "plant growth and development",
     "question": "Which hormone is responsible for apical dominance?",
     "options": {
       "A": "Cytokinin",
@@ -435,7 +435,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "breathing-and-exchange-of-gases",
+    "chapter": "breathing and exchange of gases",
     "question": "Most of the oxygen in blood is transported as",
     "options": {
       "A": "dissolved in plasma",
@@ -449,7 +449,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "body-fluids-and-circulation",
+    "chapter": "body fluids and circulation",
     "question": "The 'lub' sound of the heart is produced due to",
     "options": {
       "A": "closing of semilunar valves",
@@ -463,11 +463,11 @@
   },
   {
     "subject": "Biology",
-    "chapter": "neural-control-and-coordination",
+    "chapter": "neural control and coordination",
     "question": "Nodes of Ranvier are found in",
     "options": {
       "A": "smooth muscles",
-      "B": "non-myelinated nerve fibres",
+      "B": "non myelinated nerve fibres",
       "C": "myelinated nerve fibres",
       "D": "striated muscles"
     },
@@ -477,7 +477,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "chemical-coordination-and-integration",
+    "chapter": "chemical coordination and integration",
     "question": "The hormone that regulates basal metabolic rate is",
     "options": {
       "A": "Cortisol",
@@ -505,7 +505,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "strategies-for-enhancement-in-food-production",
+    "chapter": "strategies for enhancement in food production",
     "question": "Artificial insemination means",
     "options": {
       "A": "keeping the semen of a healthy donor in frozen state for future use",
@@ -519,7 +519,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "microbes-in-human-welfare",
+    "chapter": "microbes in human welfare",
     "question": "Which of the following is used in the production of ethanol?",
     "options": {
       "A": "Aspergillus",
@@ -533,7 +533,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "principles-of-inheritance-and-variation",
+    "chapter": "principles of inheritance and variation",
     "question": "Mendel's law of independent assortment is applicable when",
     "options": {
       "A": "genes are located on the same chromosome",
@@ -547,7 +547,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "molecular-basis-of-inheritance",
+    "chapter": "molecular basis of inheritance",
     "question": "Which enzyme is responsible for unzipping the DNA helix during replication?",
     "options": {
       "A": "DNA polymerase",
@@ -575,10 +575,10 @@
   },
   {
     "subject": "Biology",
-    "chapter": "reproductive-health",
+    "chapter": "reproductive health",
     "question": "Which method is considered a barrier method of contraception?",
     "options": {
-      "A": "Copper-T",
+      "A": "Copper T",
       "B": "Oral pills",
       "C": "Condoms",
       "D": "Tubectomy"
@@ -589,7 +589,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "biotechnology-principles-and-processes",
+    "chapter": "biotechnology principles and processes",
     "question": "The restriction enzymes were discovered by",
     "options": {
       "A": "Watson and Crick",
@@ -603,7 +603,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "biotechnology-and-its-applications",
+    "chapter": "biotechnology and its applications",
     "question": "Bt toxin gene has been cloned from",
     "options": {
       "A": "Bacillus subtilis",
@@ -617,7 +617,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "organisms-and-populations",
+    "chapter": "organisms and populations",
     "question": "A population growing in a habitat with limited resources shows",
     "options": {
       "A": "exponential growth",
@@ -631,7 +631,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "environmental-issues",
+    "chapter": "environmental issues",
     "question": "Which of the following is the most abundant greenhouse gas?",
     "options": {
       "A": "Methane",
@@ -659,7 +659,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "photosynthesis-in-higher-plants",
+    "chapter": "photosynthesis in higher plants",
     "question": "Which of the following is the primary acceptor of electrons in the light reaction of photosynthesis?",
     "options": {
       "A": "Ferredoxin",
@@ -673,7 +673,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "respiration-in-plants",
+    "chapter": "respiration in plants",
     "question": "The respiratory quotient (RQ) of fat is",
     "options": {
       "A": "1",
@@ -687,7 +687,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "plant-growth-and-development",
+    "chapter": "plant growth and development",
     "question": "Which plant hormone promotes seed dormancy?",
     "options": {
       "A": "Auxin",
@@ -701,7 +701,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "digestion-and-absorption",
+    "chapter": "digestion and absorption",
     "question": "Bile salts help in digestion of",
     "options": {
       "A": "Carbohydrates",
@@ -715,7 +715,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "breathing-and-exchange-of-gases",
+    "chapter": "breathing and exchange of gases",
     "question": "The maximum volume of air a person can inhale after a normal expiration is called",
     "options": {
       "A": "Inspiratory reserve volume",
@@ -729,7 +729,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "body-fluids-and-circulation",
+    "chapter": "body fluids and circulation",
     "question": "Which of the following prevents backflow of blood in the heart?",
     "options": {
       "A": "Atrium",
@@ -743,7 +743,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "excretory-products-and-their-elimination",
+    "chapter": "excretory products and their elimination",
     "question": "The basic filtration unit of the kidney is",
     "options": {
       "A": "Ureter",
@@ -757,7 +757,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "locomotion-and-movement",
+    "chapter": "locomotion and movement",
     "question": "Actin and myosin are found in",
     "options": {
       "A": "Nerves",
@@ -771,10 +771,10 @@
   },
   {
     "subject": "Biology",
-    "chapter": "neural-control-and-coordination",
+    "chapter": "neural control and coordination",
     "question": "Nodes of Ranvier are found in",
     "options": {
-      "A": "Non-myelinated axons",
+      "A": "Non myelinated axons",
       "B": "Myelinated axons",
       "C": "Dendrites",
       "D": "Cell bodies"
@@ -785,7 +785,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "chemical-coordination-and-integration",
+    "chapter": "chemical coordination and integration",
     "question": "Thyroxine is secreted by",
     "options": {
       "A": "Adrenal gland",
@@ -799,7 +799,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "reproduction-in-organisms",
+    "chapter": "reproduction in organisms",
     "question": "Which of the following is a unisexual flower?",
     "options": {
       "A": "Hibiscus",
@@ -813,7 +813,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "sexual-reproduction-in-flowering-plants",
+    "chapter": "sexual reproduction in flowering plants",
     "question": "Double fertilization is a characteristic of",
     "options": {
       "A": "Gymnosperms",
@@ -827,8 +827,8 @@
   },
   {
     "subject": "Biology",
-    "chapter": "human-reproduction",
-    "question": "In human females, meiosis-II is completed",
+    "chapter": "human reproduction",
+    "question": "In human females, meiosis II is completed",
     "options": {
       "A": "Before ovulation",
       "B": "After fertilization",
@@ -836,12 +836,12 @@
       "D": "During puberty"
     },
     "correct_option": "B",
-    "explanation": "Meiosis-II in oocytes completes only after sperm entry during fertilization.",
+    "explanation": "Meiosis II in oocytes completes only after sperm entry during fertilization.",
     "image": ""
   },
   {
     "subject": "Biology",
-    "chapter": "reproductive-health",
+    "chapter": "reproductive health",
     "question": "The technique called 'GIFT' is recommended for",
     "options": {
       "A": "Male infertility",
@@ -850,12 +850,12 @@
       "D": "Females with functional ovary but blocked oviduct"
     },
     "correct_option": "D",
-    "explanation": "GIFT (Gamete Intra-Fallopian Transfer) is used when the female has a functional ovary but blocked fallopian tubes.",
+    "explanation": "GIFT (Gamete Intra Fallopian Transfer) is used when the female has a functional ovary but blocked fallopian tubes.",
     "image": ""
   },
   {
     "subject": "Biology",
-    "chapter": "principles-of-inheritance-and-variation",
+    "chapter": "principles of inheritance and variation",
     "question": "Which of the following is an example of polygenic inheritance?",
     "options": {
       "A": "Skin color in humans",
@@ -869,7 +869,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "molecular-basis-of-inheritance",
+    "chapter": "molecular basis of inheritance",
     "question": "The Okazaki fragments are joined by",
     "options": {
       "A": "Helicase",
@@ -897,7 +897,7 @@
   },
   {
     "subject": "Biology",
-    "chapter": "human-health-and-disease",
+    "chapter": "human health and disease",
     "question": "The cause of malaria is",
     "options": {
       "A": "Bacteria",
@@ -911,21 +911,21 @@
   },
   {
     "subject": "Biology",
-    "chapter": "strategies-for-enhancement-in-food-production",
+    "chapter": "strategies for enhancement in food production",
     "question": "Which technique is used for selecting desirable recombinants?",
     "options": {
       "A": "Electrophoresis",
       "B": "ELISA",
-      "C": "Marker-assisted selection",
+      "C": "Marker assisted selection",
       "D": "Tissue culture"
     },
     "correct_option": "C",
-    "explanation": "Marker-assisted selection (MAS) uses molecular markers to select plants with desired traits.",
+    "explanation": "Marker assisted selection (MAS) uses molecular markers to select plants with desired traits.",
     "image": ""
   },
   {
     "subject": "Biology",
-    "chapter": "microbes-in-human-welfare",
+    "chapter": "microbes in human welfare",
     "question": "Which microbe is used in alcohol production?",
     "options": {
       "A": "Rhizobium",
