@@ -1,10 +1,7 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
-import { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
 const debug = createDebug('bot:quizes');
-
-const PAGE_SIZE = 8;
 
 const quizes = () => async (ctx: Context) => {
   debug('Triggered "quizes" handler');
@@ -12,135 +9,179 @@ const quizes = () => async (ctx: Context) => {
   if (!ctx.message || !('text' in ctx.message)) return;
 
   const text = ctx.message.text.trim().toLowerCase();
-  const pyqMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
-  const chapterMatch = text.match(/^\/chapter\s+([a-z0-9\s\-]+)?\s*(\d+)?$/i);
+  const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
+  const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
 
-  const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/quiz.json');
-  const allQuestions = await response.json();
-
-  // Handle /chapter <chapter name> <count?>
-  if (chapterMatch) {
-    const chapter = chapterMatch[1]?.trim().toLowerCase();
-    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
-
-    if (!chapter) {
-      return sendHelpWithChapters(ctx, allQuestions, 1);
+  // Function to fetch all questions
+  const fetchQuestions = async () => {
+    try {
+      const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/quiz.json');
+      return await response.json();
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      throw err;
     }
-
-    const filtered = allQuestions.filter(
-      (q: any) => q.chapter?.toLowerCase() === chapter
-    );
-
-    if (!filtered.length) {
-      return ctx.reply(`Dear, please use the correct chapter name.\nTry /chapter living world 2\n\nHere are available chapters:`, {
-        reply_markup: await getChaptersKeyboard(allQuestions, 1)
-      });
-    }
-
-    const shuffled = filtered.sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, Math.min(count, filtered.length));
-
-    for (const question of selected) {
-      const options = [question.options.A, question.options.B, question.options.C, question.options.D];
-      const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-
-      if (question.image) {
-        await ctx.replyWithPhoto({ url: question.image });
-      }
-
-      await ctx.sendPoll(question.question, options, {
-        type: 'quiz',
-        correct_option_id: correctOptionIndex,
-        is_anonymous: false,
-        explanation: question.explanation || 'No explanation provided.'
-      } as any);
-    }
-    return;
-  }
-
-  // Handle /pyq, /b1, /c1, etc.
-  if (!pyqMatch) return;
-
-  const cmd = pyqMatch[1];
-  const subjectCode = pyqMatch[2];
-  const count = pyqMatch[3] ? parseInt(pyqMatch[3].trim(), 10) : 1;
-
-  const subjectMap: Record<string, string> = {
-    b: 'biology',
-    c: 'chemistry',
-    p: 'physics',
   };
 
-  let subject: string | null = null;
-  let isMixed = false;
+  // Function to get unique chapters
+  const getUniqueChapters = (questions: any[]) => {
+    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
+    return Array.from(chapters).filter(ch => ch).sort();
+  };
 
-  if (cmd === 'pyq') {
-    isMixed = true;
-  } else if (subjectCode) {
-    subject = subjectMap[subjectCode];
-  } else if (['b1', 'c1', 'p1'].includes(cmd)) {
-    subject = subjectMap[cmd[0]];
+  // Function to send paginated chapters list
+  const sendChaptersList = async (chapters: string[], page: number = 1, perPage: number = 10) => {
+    const totalPages = Math.ceil(chapters.length / perPage);
+    const start = (page - 1) * perPage;
+    const end = start + perPage;
+    const paginatedChapters = chapters.slice(start, end);
+
+    let message = `Available chapters (Page ${page}/${totalPages}):\n`;
+    message += paginatedChapters.map(ch => `/chapter ${ch} <number>`).join('\n');
+
+    const buttons: any[] = [];
+    if (page > 1) buttons.push({ text: '⬅️ Previous', callback_data: `chapters:${page - 1}` });
+    if (page < totalPages) buttons.push({ text: 'Next ➡️', callback_data: `chapters:${page + 1}` });
+
+    await ctx.reply(message, {
+      reply_markup: {
+        inline_keyboard: [buttons],
+      },
+    });
+  };
+
+  // Handle callback queries for pagination
+  if ('callback_query' in ctx && ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+    const data = ctx.callbackQuery.data;
+    if (data.startsWith('chapters:')) {
+      const page = parseInt(data.split(':')[1], 10);
+      try {
+        const allQuestions = await fetchQuestions();
+        const chapters = getUniqueChapters(allQuestions);
+        await sendChaptersList(chapters, page);
+      } catch (err) {
+        await ctx.reply('Failed to load chapters.');
+      }
+      return;
+    }
   }
 
-  const filtered = isMixed
-    ? allQuestions
-    : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
+  // Handle /chapter command
+  if (chapterMatch) {
+    const chapterName = chapterMatch[1].trim();
+    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
 
-  if (!filtered.length) {
-    await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+    try {
+      const allQuestions = await fetchQuestions();
+      const filteredByChapter = allQuestions.filter(
+        (q: any) => q.chapter?.toLowerCase().trim() === chapterName.toLowerCase()
+      );
+
+      // Check if chapter exists
+      if (!filteredByChapter.length) {
+        const chapters = getUniqueChapters(allQuestions);
+        await ctx.reply(
+          `Dear user, no questions found for chapter "${chapterName}".\n` +
+          `Please use a valid chapter name, e.g., /chapter living world 2 for 2 questions.\n` +
+          `Click below to see all available chapters:`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: '📚 View All Chapters', callback_data: 'chapters:1' }]],
+            },
+          }
+        );
+        return;
+      }
+
+      // Select random questions
+      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
+
+      if (!selected.length) {
+        await ctx.reply(`No questions available for chapter "${chapterName}".`);
+        return;
+      }
+
+      // Send questions as polls
+      for (const question of selected) {
+        const options = [question.options.A, question.options.B, question.options.C, question.options.D];
+        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
+        }
+
+        await ctx.sendPoll(question.question, options, {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any);
+      }
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      await ctx.reply('Oops! Failed to load questions.');
+    }
     return;
   }
 
-  const shuffled = filtered.sort(() => 0.5 - Math.random());
-  const selected = shuffled.slice(0, Math.min(count, filtered.length));
+  // Existing /pyq, /b1, /c1, /p1 command handling
+  if (cmdMatch) {
+    const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
+    const subjectCode = cmdMatch[2]; // b, c, p
+    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
 
-  for (const question of selected) {
-    const options = [question.options.A, question.options.B, question.options.C, question.options.D];
-    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+    const subjectMap: Record<string, string> = {
+      b: 'biology',
+      c: 'chemistry',
+      p: 'physics',
+    };
 
-    if (question.image) {
-      await ctx.replyWithPhoto({ url: question.image });
+    let subject: string | null = null;
+    let isMixed = false;
+
+    if (cmd === 'pyq') {
+      isMixed = true;
+    } else if (subjectCode) {
+      subject = subjectMap[subjectCode];
+    } else if (['b1', 'c1', 'p1'].includes(cmd)) {
+      subject = subjectMap[cmd[0]];
     }
 
-    await ctx.sendPoll(question.question, options, {
-      type: 'quiz',
-      correct_option_id: correctOptionIndex,
-      is_anonymous: false,
-      explanation: question.explanation || 'No explanation provided.'
-    } as any);
+    try {
+      const allQuestions = await fetchQuestions();
+      let filtered = isMixed
+        ? allQuestions
+        : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
+
+      if (!filtered.length) {
+        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+        return;
+      }
+
+      const shuffled = filtered.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filtered.length));
+
+      for (const question of selected) {
+        const options = [question.options.A, question.options.B, question.options.C, question.options.D];
+        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
+        }
+
+        await ctx.sendPoll(question.question, options, {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any);
+      }
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      await ctx.reply('Oops! Failed to load questions.');
+    }
   }
 };
-
-async function sendHelpWithChapters(ctx: Context, questions: any[], page = 1) {
-  await ctx.reply(
-    `Dear, please include correct chapter name like:\n\n/chapters living world 2 (for 2 questions)\n\nHere are the available chapters:`,
-    { reply_markup: await getChaptersKeyboard(questions, page) }
-  );
-}
-
-async function getChaptersKeyboard(questions: any[], page: number): Promise<InlineKeyboardMarkup> {
-  const allChapters = Array.from(
-    new Set(questions.map((q: any) => q.chapter?.trim()).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
-
-  const start = (page - 1) * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
-  const pageChapters = allChapters.slice(start, end);
-
-  const buttons = pageChapters.map((ch) => [{
-    text: ch,
-    callback_data: `chapter_${ch.replace(/\s+/g, '_').toLowerCase()}`
-  }]);
-
-  const totalPages = Math.ceil(allChapters.length / PAGE_SIZE);
-  const navButtons = [];
-
-  if (page > 1) navButtons.push({ text: '« Prev', callback_data: `chapters_page_${page - 1}` });
-  if (page < totalPages) navButtons.push({ text: 'Next »', callback_data: `chapters_page_${page + 1}` });
-
-  if (navButtons.length) buttons.push(navButtons);
-
-  return { inline_keyboard: buttons };
-}
 
 export { quizes };
