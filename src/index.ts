@@ -35,6 +35,7 @@ interface PendingQuestion {
     explanation: string;
     image?: string;
   }>;
+  expectingImageFor?: string; // Track poll ID awaiting an image
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
@@ -186,17 +187,14 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     chapter,
     count,
     questions: [],
+    expectingImageFor: undefined,
   };
 
-  await ctx.reply(`Okay, please share ${count} questions for *${subject}* (Chapter: *${chapter}*). Send each question in the format:\n\n` +
-    `Question: <question>\n` +
-    `A: <option A>\n` +
-    `B: <option B>\n` +
-    `C: <option C>\n` +
-    `D: <option D>\n` +
-    `Correct: <A/B/C/D>\n` +
-    `Explanation: <explanation>\n` +
-    `Image: <optional image URL>`, { parse_mode: 'Markdown' });
+  await ctx.reply(
+    `Okay, please share ${count} questions for *${subject}* (Chapter: *${chapter}*) as Telegram quiz polls. ` +
+    `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
+    `After sending a poll, you can optionally send an image URL for it.`
+  , { parse_mode: 'Markdown' });
 });
 
 // User greeting and message handling
@@ -269,74 +267,91 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle question submissions from admin
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]) {
+  // Handle question submissions from admin (quiz polls)
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
-    const text = msg.text;
+    const poll = msg.poll;
 
-    if (text) {
-      // Parse question format
-      const questionMatch = text.match(/Question:([\s\S]*?)(?=(?:A:|$))/i);
-      const optionsMatchA = text.match(/A:([\s\S]*?)(?=(?:B:|$))/i);
-      const optionsMatchB = text.match(/B:([\s\S]*?)(?=(?:C:|$))/i);
-      const optionsMatchC = text.match(/C:([\s\S]*?)(?=(?:D:|$))/i);
-      const optionsMatchD = text.match(/D:([\s\S]*?)(?=(?:Correct:|$))/i);
-      const correctMatch = text.match(/Correct:([A-D])(?=(?:Explanation:|$))/i);
-      const explanationMatch = text.match(/Explanation:([\s\S]*?)(?=(?:Image:|$))/i);
-      const imageMatch = text.match(/Image:([\s\S]*?)$/i);
-
-      if (questionMatch && optionsMatchA && optionsMatchB && optionsMatchC && optionsMatchD && correctMatch && explanationMatch) {
-        const question = {
-          subject: submission.subject,
-          chapter: submission.chapter,
-          question: questionMatch[1].trim(),
-          options: {
-            A: optionsMatchA[1].trim(),
-            B: optionsMatchB[1].trim(),
-            C: optionsMatchC[1].trim(),
-            D: optionsMatchD[1].trim(),
-          },
-          correct_option: correctMatch[1].trim(),
-          explanation: explanationMatch[1].trim(),
-          image: imageMatch ? imageMatch[1].trim() : '',
-        };
-
-        submission.questions.push(question);
-
-        if (submission.questions.length < submission.count) {
-          await ctx.reply(
-            `Question ${submission.questions.length} saved. Please send the next question (${submission.questions.length + 1}/${submission.count}).`
-          );
-        } else {
-          // Save all questions to Firebase
-          try {
-            const questionsRef = ref(db, 'questions');
-            for (const q of submission.questions) {
-              const newQuestionRef = push(questionsRef);
-              await set(newQuestionRef, q);
-            }
-            await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
-            delete pendingSubmissions[chat.id];
-          } catch (error) {
-            console.error('Failed to save questions to Firebase:', error);
-            await ctx.reply('❌ Error: Unable to save questions to Firebase.');
-          }
-        }
-      } else {
-        await ctx.reply(
-          'Invalid question format. Please use:\n\n' +
-          'Question: <question>\n' +
-          'A: <option A>\n' +
-          'B: <option B>\n' +
-          'C: <option C>\n' +
-          'D: <option D>\n' +
-          'Correct: <A/B/C/D>\n' +
-          'Explanation: <explanation>\n' +
-          'Image: <optional image URL>'
-        );
-      }
+    if (poll.type !== 'quiz') {
+      await ctx.reply('Please send a quiz poll with a correct answer and explanation.');
       return;
     }
+
+    if (poll.options.length !== 4) {
+      await ctx.reply('Quiz polls must have exactly 4 options.');
+      return;
+    }
+
+    if (!poll.explanation) {
+      await ctx.reply('Quiz polls must include an explanation.');
+      return;
+    }
+
+    const correctOptionIndex = poll.correct_option_id;
+    const correctOptionLetter = ['A', 'B', 'C', 'D'][correctOptionIndex];
+
+    const question = {
+      subject: submission.subject,
+      chapter: submission.chapter,
+      question: poll.question,
+      options: {
+        A: poll.options[0].text,
+        B: poll.options[1].text,
+        C: poll.options[2].text,
+        D: poll.options[3].text,
+      },
+      correct_option: correctOptionLetter,
+      explanation: poll.explanation,
+      image: '',
+    };
+
+    submission.questions.push(question);
+    submission.expectingImageFor = poll.id; // Track poll ID for potential image
+
+    if (submission.questions.length < submission.count) {
+      await ctx.reply(
+        `Question ${submission.questions.length} saved. Please send an image URL for this question (or reply "skip" to proceed), ` +
+        `then send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`
+      );
+    } else {
+      // Save all questions to Firebase
+      try {
+        const questionsRef = ref(db, 'questions');
+        for (const q of submission.questions) {
+          const newQuestionRef = push(questionsRef);
+          await set(newQuestionRef, q);
+        }
+        await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
+        delete pendingSubmissions[chat.id];
+      } catch (error) {
+        console.error('Failed to save questions to Firebase:', error);
+        await ctx.reply('❌ Error: Unable to save questions to Firebase.');
+      }
+    }
+    return;
+  }
+
+  // Handle image URL or skip for admin question submissions
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.text && pendingSubmissions[chat.id].expectingImageFor) {
+    const submission = pendingSubmissions[chat.id];
+    const lastQuestion = submission.questions[submission.questions.length - 1];
+
+    if (msg.text.toLowerCase() === 'skip') {
+      lastQuestion.image = '';
+      submission.expectingImageFor = undefined;
+      if (submission.questions.length < submission.count) {
+        await ctx.reply(`Image skipped. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
+      }
+    } else if (msg.text.startsWith('http') && msg.text.match(/\.(jpg|jpeg|png|gif)$/i)) {
+      lastQuestion.image = msg.text;
+      submission.expectingImageFor = undefined;
+      if (submission.questions.length < submission.count) {
+        await ctx.reply(`Image saved. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
+      }
+    } else {
+      await ctx.reply('Please send a valid image URL (jpg, jpeg, png, or gif) or reply "skip" to proceed without an image.');
+    }
+    return;
   }
 
   // Detect Telegram Poll and send JSON to admin
