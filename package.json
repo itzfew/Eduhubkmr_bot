@@ -10,7 +10,8 @@
     "axios": "^1.6.8",
     "dotenv-cli": "^7.4.2",
     "firebase": "^10.14.1",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "telegraph-uploader": "^1.2.1"
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",
