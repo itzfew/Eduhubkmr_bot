@@ -1,6 +1,5 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
-import quizData from '../../data/quiz.json'; // adjust path as needed
 
 const debug = createDebug('bot:quizes');
 
@@ -14,8 +13,8 @@ const quizes = () => async (ctx: Context) => {
 
   if (!match) return;
 
-  const cmd = match[1];
-  const subjectCode = match[2];
+  const cmd = match[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
+  const subjectCode = match[2]; // b, c, p
   const count = match[3] ? parseInt(match[3].trim(), 10) : 1;
 
   const subjectMap: Record<string, string> = {
@@ -36,7 +35,8 @@ const quizes = () => async (ctx: Context) => {
   }
 
   try {
-    const allQuestions = quizData;
+    const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/master/quiz.json');
+    const allQuestions = await response.json();
 
     let filtered = isMixed
       ? allQuestions
@@ -66,8 +66,8 @@ const quizes = () => async (ctx: Context) => {
       } as any);
     }
   } catch (err) {
-    debug('Error loading questions:', err);
-    await ctx.reply(`Error loading quiz data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    debug('Error fetching questions:', err);
+    await ctx.reply('Oops! Failed to load questions.');
   }
 };
 
