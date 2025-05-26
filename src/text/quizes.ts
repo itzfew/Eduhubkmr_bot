@@ -1,6 +1,7 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
-import quizData from '../../data/quiz.json'; // adjust path as needed
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 const debug = createDebug('bot:quizes');
 
@@ -10,12 +11,12 @@ const quizes = () => async (ctx: Context) => {
   if (!ctx.message || !('text' in ctx.message)) return;
 
   const text = ctx.message.text.trim().toLowerCase();
-  const match = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const match = text.match(/^/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
 
   if (!match) return;
 
-  const cmd = match[1];
-  const subjectCode = match[2];
+  const cmd = match[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
+  const subjectCode = match[2]; // b, c, p
   const count = match[3] ? parseInt(match[3].trim(), 10) : 1;
 
   const subjectMap: Record<string, string> = {
@@ -36,7 +37,10 @@ const quizes = () => async (ctx: Context) => {
   }
 
   try {
-    const allQuestions = quizData;
+    // Load quiz.json from src/data/quiz.json
+    const filePath = join(__dirname, '../data/quiz.json');
+    const fileContent = await readFile(filePath, 'utf-8');
+    const allQuestions = JSON.parse(fileContent);
 
     let filtered = isMixed
       ? allQuestions
@@ -66,8 +70,8 @@ const quizes = () => async (ctx: Context) => {
       } as any);
     }
   } catch (err) {
-    debug('Error loading questions:', err);
-    await ctx.reply(`Error loading quiz data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    debug('Error fetching questions:', err);
+    await ctx.reply('Oops! Failed to load questions.');
   }
 };
 
