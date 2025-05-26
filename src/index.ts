@@ -16,12 +16,10 @@ import { me } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 
-// Import fetchQuestions and getUniqueChapters from quizes module
-import { fetchQuestions, getUniqueChapters } from './text'; // Assuming quizes is exported from './text'
-
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
+let accessToken: string | null = null;
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
@@ -40,10 +38,72 @@ interface PendingQuestion {
   }>;
   expectingImageFor?: string; // Track poll ID awaiting an image
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
-  chapters?: string[]; // Store chapters list for selection
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
+
+// --- TELEGRAPH INTEGRATION ---
+async function createTelegraphAccount() {
+  try {
+    const res = await fetch('https://api.telegra.ph/createAccount', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ short_name: 'EduhubBot', author_name: 'Eduhub KMR Bot' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      accessToken = data.result.access_token;
+      console.log('Telegraph account created, access token:', accessToken);
+    } else {
+      throw new Error(data.error);
+    }
+  } catch (error) {
+    console.error('Failed to create Telegraph account:', error);
+  }
+}
+
+async function createTelegraphPage(title: string, content: string) {
+  if (!accessToken) {
+    await createTelegraphAccount();
+  }
+  try {
+    const res = await fetch('https://api.telegra.ph/createPage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        access_token: accessToken,
+        title,
+        content: [{ tag: 'p', children: [content] }],
+        return_content: true,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      return data.result.url;
+    } else {
+      throw new Error(data.error);
+    }
+  } catch (error) {
+    console.error('Failed to create Telegraph page:', error);
+    return null;
+  }
+}
+
+// --- FETCH CHAPTERS ---
+async function fetchChapters(subject: string): Promise<string[]> {
+  const subjectFile = subject.toLowerCase();
+  const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
+    const data = await res.json();
+    const chapters = [...new Set(data.map((item: any) => item.chapter))]; // Unique chapters
+    return chapters.sort();
+  } catch (error) {
+    console.error(`Error fetching chapters for ${subject}:`, error);
+    return [];
+  }
+}
 
 // --- COMMANDS ---
 bot.command('about', about());
@@ -172,7 +232,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   const count = parseInt(countStr, 10);
 
   if (!countStr || isNaN(count) || count <= 0) {
-    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10 or /addBiology__Plant_Kingdom 11');
+    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
   }
 
   let subject = '';
@@ -180,71 +240,36 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
 
   if (command.includes('__')) {
     const [subj, chp] = command.split('__');
-    subject = subj.replace('add', '').replace(/_/g, ' ').toLowerCase();
+    subject = subj.replace('add', '').replace(/_/g, ' ');
     chapter = chp.replace(/_/g, ' ');
   } else {
-    subject = command.replace('add', '').replace(/_/g, ' ').toLowerCase();
+    subject = command.replace('add', '').replace(/_/g, ' ');
   }
 
-  // Validate subject
-  const validSubjects = ['biology', 'physics', 'chemistry'];
-  if (!validSubjects.includes(subject)) {
-    return ctx.reply(`Invalid subject. Please use one of: ${validSubjects.join(', ')}.`);
+  // Fetch chapters for the subject
+  const chapters = await fetchChapters(subject);
+  if (chapters.length === 0) {
+    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
   }
 
-  if (command.includes('__')) {
-    // Direct chapter specified, proceed with submission
-    pendingSubmissions[ctx.from.id] = {
-      subject,
-      chapter,
-      count,
-      questions: [],
-      expectingImageFor: undefined,
-      awaitingChapterSelection: false,
-    };
+  // Create numbered list of chapters
+  const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
+  const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
+  const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
 
-    await ctx.reply(
-      `Okay, please share ${count} questions for *${subject}* (Chapter: *${chapter}*) as Telegram quiz polls. ` +
-      `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
-      `After sending a poll, you can optionally send an image URL for it.`,
-      { parse_mode: 'Markdown' }
-    );
-  } else {
-    // Fetch and display chapters for the subject
-    try {
-      const questions = await fetchQuestions(subject);
-      const chapters = getUniqueChapters(questions);
+  // Store pending submission with flag for chapter selection
+  pendingSubmissions[ctx.from.id] = {
+    subject,
+    chapter,
+    count,
+    questions: [],
+    expectingImageFor: undefined,
+    awaitingChapterSelection: true,
+  };
 
-      if (!chapters.length) {
-        return ctx.reply(`No chapters found for *${subject}*.`, { parse_mode: 'Markdown' });
-      }
-
-      // Store pending submission with chapters list and flag for chapter selection
-      pendingSubmissions[ctx.from.id] = {
-        subject,
-        chapter: '',
-        count,
-        questions: [],
-        expectingImageFor: undefined,
-        awaitingChapterSelection: true,
-        chapters,
-      };
-
-      // Format chapters with numbering
-      const chaptersList = chapters
-        .map((chapter, index) => `${index + 1}. ${chapter}`)
-        .join('\n');
-
-      await ctx.reply(
-        `📚 *Available Chapters for ${subject}:*\n\n${chaptersList}\n\n` +
-        `Please reply with the chapter number (e.g., 3) to select a chapter.`,
-        { parse_mode: 'Markdown' }
-      );
-    } catch (err) {
-      console.error('Error fetching chapters:', err);
-      await ctx.reply('❌ Error: Unable to fetch chapters. Please try again.');
-    }
-  }
+  const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
+                    (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
+  await ctx.reply(replyText, { parse_mode: 'Markdown' });
 });
 
 // User greeting and message handling
@@ -317,24 +342,22 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle chapter number selection for admin
+  // Handle chapter selection for admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
     const submission = pendingSubmissions[chat.id];
     const chapterNumber = parseInt(msg.text.trim(), 10);
 
-    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > submission.chapters!.length) {
-      await ctx.reply(
-        `Invalid chapter number. Please select a number between 1 and ${submission.chapters!.length}.`
-      );
+    const chapters = await fetchChapters(submission.subject);
+    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > chapters.length) {
+      await ctx.reply(`Please enter a valid chapter number between 1 and ${chapters.length}.`);
       return;
     }
 
-    // Save the selected chapter
-    submission.chapter = submission.chapters![chapterNumber - 1];
+    submission.chapter = chapters[chapterNumber - 1];
     submission.awaitingChapterSelection = false;
 
     await ctx.reply(
-      `Okay, chapter *${submission.chapter}* selected for *${submission.subject}*. ` +
+      `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
       `Please share ${submission.count} questions as Telegram quiz polls. ` +
       `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
       `After sending a poll, you can optionally send an image URL for it.`,
