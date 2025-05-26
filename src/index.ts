@@ -8,7 +8,7 @@ import { study } from './commands/study';
 import { neet } from './commands/neet';
 import { jee } from './commands/jee';
 import { groups } from './commands/groups';
-import { quizes,handleQuizActions } from './text';
+import { quizes } from './text';
 import { greeting } from './text';
 import { development, production } from './core';
 import { isPrivateChat } from './utils/groupSettings';
