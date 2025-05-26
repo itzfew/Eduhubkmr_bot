@@ -7,9 +7,10 @@
   "homepage": "https://github.com/itzfew/eduhub-bot",
   "dependencies": {
     "@vercel/node": "^3.2.24",
+    "axios": "^1.6.8",
     "dotenv-cli": "^7.4.2",
-    "telegraf": "^4.16.3",
-    "axios": "^1.6.8"
+    "firebase": "^10.14.1",
+    "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",
