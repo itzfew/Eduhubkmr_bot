@@ -8,9 +8,11 @@
   "dependencies": {
     "@vercel/node": "^3.2.24",
     "dotenv-cli": "^7.4.2",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "axios": "^1.6.8"
   },
   "devDependencies": {
+    "@types/axios": "^0.14.0",
     "@types/debug": "^4.1.12",
     "@types/node": "^22.8.6",
     "@vercel/ncc": "^0.38.2",
