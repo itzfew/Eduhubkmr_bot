@@ -575,6 +575,468 @@
   },
   {
     "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "1. Five kingdom system of classification suggested by R.H. Whittaker is not based on\n \n(a) presence or absence of a well defined nucleus  (b) mode of reproduction  (c) mode of nutrition  (d) complexity of body organisation.  (2014)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "R.H. Whittaker considered complexity of cell structure &structural  organisation, mode  of nutrition, ecological life style& phylogenetic  \nrelationships for the five kingdom system of classification.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "4. In which kingdom would you classify the archaea  and nitrogen-fixing organisms, if the five kingdom  system of classification is used?\n \n(a) Plantae  (b) Fungi  (c) Protista  (d) Monera  (2003) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "The Kingdom Monera includes all prokaryotes. They are basically unicellular. The archaea & nitrogenfixing organisms are placed under monera. All others fungi plantae protists & animalia are eukaryotic",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "5. In five kingdom system, the main basis of  classification is \n(a) structure of nucleus\n (b) mode of nutrition  (c) structure of cell wall  (d) asexual reproduction.  (2002) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "• complexity of cellstructure \n• complexity of the body organization \n• mode of nutrition. Yad rkhna ab😌",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "6. In the five kingdom system of classification, which  \nsingle kingdom out of the following can include  blue-green algae, nitrogen fixing bacteria and  methanogenic archaebacteria? \n(a) Plantae  (b) Protista  (c) Monera  (d) Fungi  (1998)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "C",
+    "explanation": "The Kingdom Monera includes  \nall prokaryotes The blue-green algae,nitrogen fixing  bacteria & methanogenic archaebacteria are all  \nunicellular prokaryotes so they are included in the Kingdom Monera.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "7. BGA (blue green algae) are included in which of the  following groups? \n(a) Bryophytes \n(b) Prokaryotes  (c) Protista  (d) Fungi  (1996)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "A prep. By TEAM NISHKAM ✨",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "8. An important criterion for modern day classification is\n \n(a) resemblances in morphology  (b) anatomical and physiological traits  (c) breeding habits  (d) presence or absence of notochord.  (1991)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "A prep. by TEAM NISHKAM ✨",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "10. Which of the following are found in extreme saline  conditions?\n \n(a) Eubacteria  (b) Cyanobacteria  (c) Mycobacteria  (d) Archaebacteria  (NEET 2017) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "Halophiles, a type of archaebacteria, usually  occur in extreme saline conditions like salt pans, salt  beds and salt marshes.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "11. Which among the following are the smallest living  cells, known without a definite cell wall, pathogenic  \nto plants as well as animals and can survive without  oxygen?\n  (a) Pseudomonas  (b) Mycoplasma  (c) Nostoc  (d) Bacillus (NEET 2017) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "11. (b) : Mycoplasmas are the smallest living cells,  known without a def \ninite cell wall. They are pathogenic  \nto both plants and animals and can survive without  oxygen.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "12. Which of the following components provides sticky  character to the bacterial cell?\n \n(a) Nuclear membrane  (b) Plasmamembrane  (c) Glycocalyx  (d) Cell wall (NEET 2017)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "C",
+    "explanation": "Glycocalyx is the outermost mucilage layer  of the cell envelope which consists of non-cellulosic  \npolysaccharides with or without proteins. It gives sticky  character to the cell.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "14. Methanogens belong to\n \n(a) eubacteria  (b) archaebacteria  (c) dinoflagellates  (d) slimemoulds.  (NEET-II 2016) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "Methanogens belong to archaebacteria.  They include methane producing genera such as  Methanobacillus and Methanothrix.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "16. Archaebacteria differ from eubacteria in\n \n(a) cell membrane structure  (b) mode of nutrition  (c) cell shape  (d) mode of reproduction.  (2014",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "A prep by TEAM NISHKAM ✨💖",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "17. Which of the following are likely to be present in  deep sea water? \n(a) Blue-green algae \n(b) Saprophytic fungi  (c) Archaebacteria  (d) Eubacteria  (NEET 2013) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "C",
+    "explanation": "These include methanogens which produce methane the  thermoacidophilic bacteria which live in extremely hot&acidic environment & halophilic bacteria which can only function at high salt concentration",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "19. The cyanobacteria are also referred toas\n \n(a) protists  (b) golden algae  (c) slime moulds  (d) blue greenalgae.  (2012) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "Cyanobacteria consist of two groups of  photosynthetic eubacteria: the blue-green bacteria  formerly known as blue-green algae, or cyanophyta),    grass-green bacteria, or chloroxybacteria",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "20. The most abundant prokaryotes helpful to humans  in making curd from milk and in production of  antibiotics are the ones categorisedas\n \n(a) cyanobacteria  (b) archaebacteria  (c) chemosynthetic autotrophs  (d) heterotrophic bacteria.  (2012) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "Maximum number of antibiotics are produced by mycelial bacteria known as actinomycete &most of the actinomycetes are heterotrophic Lactic acid bacteria that are used in prep of curd are heterotrophic",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "21. In eubacteria, a cellular component that resembles  eukaryotic cell is\n \n(a) plasma membrane (b) nucleus  (c) ribosomes  (d) cell wall.  (2011)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "But nucleus,  ribosomes and cell wall are little different in eukaryotic  \ncell in their structure and organization from eubacterial  \ncell.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "22. Some hyperthermophilic organisms that grow  in highly acidic (pH 2) habitats belong to the two  \ngroups\n  (a) eubacteria and archaebacteria   (b) cyanobacteria and diatoms  (c) protists and mosses  (d) liverworts and yeasts.  (2010) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "A prep by TEAM NISHKAM ✨",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "33. In bacteria, plasmid is \n(a) extra chromosomal material \n(b) main DNA  (c) non functional DNA  (d) repetitive gene.  (2002)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "A prep by TEAM NISHKAM ✨",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "34. Organisms which obtain energy by the oxidation of  reduced inorganic compounds are called \n(a) photoautotrophs \n(b) chemoautotrophs  (c) saprozoic  (d) coproheterotrophs.  (2002) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "Chemoautotrophs are organisms that are  capable of manufacturing their organic food utilising  chemical energy released in oxidation of some inorganic  substances.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "35. What is true for archaebacteria? \n(a) All halophiles \n(b) All photosynthetics  (c) All fossils  (d) Oldest living beings  (2001)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "They are believed to have originated  \nat a time when there were extreme conditions in the  biosphere. Even today they are found in environments  \nwhere other kinds of bacteria cannot survive.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "36. Difference in Gram positive and Gram negative  bacteria is due to \n(a) cell wall \n(b) cellmembrane  (c) ribosome  (d) cytoplasm.  (2001) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D o"
+    },
+    "correct_option": "A",
+    "explanation": "Word limit 😐\nRead NCERT 😌..,",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "38. A bacterium divides every 35 minutes. If a culture  containing 10⁵ cells permLis grown for 175minutes,  \nwhat will be the cell concentration per mL after 175  minutes?  \n (1998) ",
+    "options": {
+      "A": "(a) 35 ×10⁵ cells",
+      "B": "(b) 32 × 10⁵ cells",
+      "C": "(c) 175 ×10⁵ cells",
+      "D": "(d) 85 × 10⁵ cells"
+    },
+    "correct_option": "B",
+    "explanation": "A bacterium divides every 35 \nminutes. \nIn 175 minutes it would be 2¹⁷⁵/³⁵  times = 2 ⁵ times.   In 175 minutes 10⁵bacterium cells would be = 25 × 10⁵  = 32 × 10⁵ /mL.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "39. The DNA of E.coli is\n \n(a) double stranded and linear  (b) double stranded and circular  (c) single stranded and linear  (d)  single stranded and circular.  (1998) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "E. coli contains a double stranded  \nDNA as its genetic material. The DNA is not associated  with any histone proteins so it is referred to as naked  \nDNA. This DNA is circular with no freeends.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "41. A few organisms are known to grow and multiply at  temperatures of 100-105°C. They belong to\n  \n(a) thermophilic sulphur bacteria  (b) hot spring blue-green algae  (c) methanogenic archaebacteria  (d)marine archaebacteria.  (1998)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "Thermoacidophile archaebacteria are found in hot sulphur springs.  Although they are microscopic, single-celled organisms,  they flourish under conditions which would kill higher  organisms.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "42. The hereditary material present in the bacterium E.coli is \n(a) single-stranded DNA \n(b) double-stranded DNA  (c) DNA  (d) RNA.  (1997)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "Repeated h",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "43. Azotobacter and Bacillus polymyxa are the examples  of\n \n(a) pathogenic bacteria  (b) decomposers  (c) symbiotic N2 fixer  (d) non-symbiotic N2 fixer.  (1996) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "A prep by TEAM NISHKAM ✨",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "44. What are the sex organs provided in some bacteria? \n(a) Sex pili \n(b) Plasmid  (c) Circular DNA  (d) Gametes  (1996)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "They are used  as sex organs during conjugation, forms conjugation  tube during conjugation.  \nWord limit 😐",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "45. Which type of DNA is found inbacteria? \n(a) Circular free DNA \n(b) Membrane bound DNA  (c) Straight DNA  (d) Helical DNA (1996)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "Bacterial cells do not have nucleus.Nuclear  material of bacteria lies free in the cell in the form of an  irregular, thin fibrillar &circular single molecule of  DNA called nucleoid or chromatin body",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "46. A large number of organic compounds can be  \ndecomposed by \n(a) Azotobacter  (b) Chemolithotrophs  (c) Mycoplasma  (d) Pseudomonas. (1995)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "Chemolithotrophs can derive the energy  required for growth from the oxidation of inorganic  components.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "48. Organisms, which fix atmospheric nitrogen in the  soil, fall under the category of \n(a) bacteria \n(b) green algae  (c) soil fungi  (d) mosses.  (1994)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "Read NCERT 😌🤍",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "49. Transduction in bacteria is mediated by \n(a) plasmid vectors \n(b) phage vectors  (c) cosmids  (d) F-factors.  (1994)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "Repeated one",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "50. (Genophore/bacterial genome or nucleoid is made of\n(a) histones and non-histones\n(b) RNA and histones  (c) a single double stranded DNA  (d) a single stranded DNA.  (1993)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "C",
+    "explanation": "Bacteria has no nuclear membrane hence it is k/as nucleoid. The genetic material is referred to as genophore. Genophore is the bacterial chromosome. It has a double stranded circular supercoiled DNA.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "51. Escherichia coli is used extensively in biological  research as it is \n(a) easily cultured \n(b) easily available  (c) easy to handle  (d) easily multiplied in host.  (1993)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "E. coli bacteria acts as a human symbionts and it is found in human intestine synthesize vitamin K&B & also help in food fermentation. It is easily cultured in any nutrient medium in the laboratory.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "biological classification",
+    "question": "52. Bacteria lack alternation of generation because there  \nis\n  (a) neither syngamy nor reduction division  (b) distinct chromosomes are absent  (c) no conjugation  (d) no exchange of genetic material. (1992,1991)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "In sexual reproduction syngamy &meiotic division takes place but in bacteria, during sexual  reproduction there is no formation of gametes hence no syngamy &reduction division",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
     "chapter": "organisms and populations",
     "question": "The term 'niche' refers to",
     "options": {
