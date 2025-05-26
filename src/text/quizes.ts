@@ -184,4 +184,4 @@ const quizes = () => async (ctx: Context) => {
   }
 };
 
-export { quizes };
+export { quizes, handleQuizActions};
