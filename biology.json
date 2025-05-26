@@ -2,15 +2,211 @@
   {
     "subject": "Biology",
     "chapter": "Living World",
-    "question": "Which organelle is known as the 'powerhouse of the cell'?",
+    "question": "3. Biological organisation starts with \n (2007)",
     "options": {
-      "A": "Nucleus",
-      "B": "Mitochondrion",
-      "C": "Ribosome",
-      "D": "Endoplasmic reticulum"
+      "A": "(a) cellular level",
+      "B": "(b) organismic level",
+      "C": "(c) atomic level",
+      "D": "(d) submicroscopic molecular level."
+    },
+    "correct_option": "D",
+    "explanation": "@yakeen2022_Quiz\n@ncertfocusquiz",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "4. Select the correctlywritten scientific name ofMango  which was first described by Carolus Linnaeus. \n(a) Mangifera Indica \n(b) Mangifera indica Car. Linn.  (c) Mangifera indica Linn.  (d) Mangifera indica  (NEET 2019)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "C",
+    "explanation": "Class 11th NCERT Page no 7 \nBinomial nomenclature",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "5. Which of the following is against the rules of ICBN? \n \n(Odisha NEET 2019)",
+    "options": {
+      "A": "(a) Hand written scientific names should be  underlined.",
+      "B": "(b) Every species should have a generic name and a  specific epithet",
+      "C": "(c) Scientific names are in Latin and should be  italicized.",
+      "D": "(d) Generic and specific names should be written  starting with small letters."
+    },
+    "correct_option": "D",
+    "explanation": "According to International Code for Botanical  Nomenclature (ICBN) the first word denoting the genus  starts with a capital letter while the specific epithet starts with a small letter",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "7. ICBN stands for \n(2007)",
+    "options": {
+      "A": "(a) International Code of Botanical Nomenclature",
+      "B": "(b) International Congress of BiologicalNames",
+      "C": "(c) Indian Code of Botanical Nomenclature",
+      "D": "(d) Indian Congress of BiologicalNames."
+    },
+    "correct_option": "A",
+    "explanation": "Read page no 6",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "9. The book ‘GeneraPlantarum’was written by \n(a) Engler and Prantl \n(b) Bentham and Hooker  (c) Bessey  (d) Hutchinson.  (1999)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
     },
     "correct_option": "B",
-    "explanation": "Mitochondria are known as the 'powerhouse of the cell' because they produce ATP through oxidative phosphorylation.",
+    "explanation": "Bentham and Hooker in their monumental  work Genera Plantarum (1862-1883) have provided  elaborate keys for the easy identification of 202 natural  orders and genera",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "11. Linnaeus evolved a system of nomenclature called \n \n(1990)",
+    "options": {
+      "A": "(a) mononomial",
+      "B": "(b) vernacular",
+      "C": "(c) binomial",
+      "D": "(d) polynomial"
+    },
+    "correct_option": "C",
+    "explanation": "Same as above one",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "12. The term “New Systematics” was introduced by \n\n(1988) ",
+    "options": {
+      "A": "(a) Bentham andHooker",
+      "B": "(b) Linnaeus",
+      "C": "(c) Julian Huxley",
+      "D": "(d) A.P. de Candolle"
+    },
+    "correct_option": "C",
+    "explanation": "The term“New Systematics”was given by Julian  Huxley (1940). This classification takes into account  \nthe cytological, morphological, genetical, anatomical,  palynological and physiological character",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "14. The common characteristics between tomato and  potato will be maximum at the level of their \n \n(Karnataka NEET 2013) ",
+    "options": {
+      "A": "(a) family",
+      "B": "(b) order",
+      "C": "(c) division",
+      "D": "(d) genus"
+    },
+    "correct_option": "A",
+    "explanation": "Potato  and tomato  both belong to Family  Solanaceae, which is commonly called as the “potato  family”. Many plants belonging to this family are sources  of vegetables, fruits, etc.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "Which one of the following animals is correctly  matched with its particular taxonomic category? \n \n (2011)",
+    "options": {
+      "A": "(a) Tiger - tigris,species",
+      "B": "(b) Cuttlefish - mollusca, class",
+      "C": "(c) Humans - primata, family",
+      "D": "(d) Housefly -Musca, order"
+    },
+    "correct_option": "A",
+    "explanation": "Page 8 to 11",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "17. Species are considered as \n \n(2003) ",
+    "options": {
+      "A": "(a) real basic units of classification",
+      "B": "(b) the lowest units of classification",
+      "C": "(c) artificial concept of human mind which cannot  be defined in absolute terms",
+      "D": "(d) real units of classification devised by  taxonomists."
+    },
+    "correct_option": "A",
+    "explanation": "Species is a natural population or group of  natural populations of individuals which are genetically  distinct and reproductively isolated with similar essential  morphological traits.\nPage no 9",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "18. Which of the following is less general in characters  as compared to genus?\n \n(a) Species  (b) Division  (c) Class  (d) Family  (2001)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "Species is the lowest  \ncategory while kingdom is the highest category. The  number of common characters is maximum in case of  \norganisms placed in the lowest category.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "19. ‘Taxon’ is the unit of a group of\n \n(a) order  (b) taxonomy  (c) species  (d) genes.  (1996)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "B",
+    "explanation": "Taxon refers to all the categories in the  taxonomic hierarchy. It may be a kingdom, class, order,  family, genus or species. It is any level of grouping of  \norganisms.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "22. A group of plants or animals with similar traits of  any rank is\n \n(a) species  (b) genus  (c) order  (d) taxon.  (1992, 1991)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "A  taxon is assigned a rank and can be placed at a particular  level in a systematic hierarchy reflecting evolutionary  \nrelationships.",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "23. A taxon is\n \n(a) a group of related families   (b) a group of related species   (c) a type of living organisms   (d) a taxonomic group of any ranking.   (1992, 1990)",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "D",
+    "explanation": "Same as above one 👆",
+    "image": ""
+  },
+  {
+    "subject": "Biology",
+    "chapter": "Living World",
+    "question": "24. Basic unit or smallest taxon of taxonomy/  classification is\n \n(a) species  (b) kingdom  (c) family  (d) variety.  (1990) ",
+    "options": {
+      "A": "A",
+      "B": "B",
+      "C": "C",
+      "D": "D"
+    },
+    "correct_option": "A",
+    "explanation": "Species is a group of individuals  \nthat resemble one another in all essential morphological  and reproductive characters so that they are able to  interbreed freely and produce fertile offspring",
     "image": ""
   },
   {
