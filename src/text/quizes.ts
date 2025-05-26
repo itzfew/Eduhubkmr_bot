@@ -35,7 +35,7 @@ const quizes = () => async (ctx: Context) => {
   }
 
   try {
-    const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/master/quiz.json');
+    const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/quiz.json?token=GHSAT0AAAAAADER2DE2SXDR2ZLPSB5BXVDS2BUOUVQ');
     const allQuestions = await response.json();
 
     let filtered = isMixed
