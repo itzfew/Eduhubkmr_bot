@@ -4,199 +4,177 @@ import createDebug from 'debug';
 const debug = createDebug('bot:quizes');
 
 const quizes = () => async (ctx: Context) => {
-debug('Triggered "quizes" handler');
+  debug('Triggered "quizes" handler');
 
-if (!ctx.message || !('text' in ctx.message)) return;
+  if (!ctx.message || !('text' in ctx.message)) return;
 
-const text = ctx.message.text.trim().toLowerCase();
-const chapterMatch = text.match(/^/chapter\s+(.+?)(?:\s+(\d+))?$/);
-const cmdMatch = text.match(/^/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const text = ctx.message.text.trim().toLowerCase();
+  const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
+  const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
 
-// Function to fetch all questions
-const fetchQuestions = async () => {
-try {
-const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/quiz.json');
-return await response.json();
-} catch (err) {
-debug('Error fetching questions:', err);
-throw err;
-}
-};
+  // Function to fetch all questions
+  const fetchQuestions = async () => {
+    try {
+      const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/quiz.json');
+      return await response.json();
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      throw err;
+    }
+  };
 
-// Function to get unique chapters
-const getUniqueChapters = (questions: any[]) => {
-const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
-return Array.from(chapters).filter(ch => ch).sort();
-};
+  // Function to get unique chapters
+  const getUniqueChapters = (questions: any[]) => {
+    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
+    return Array.from(chapters).filter(ch => ch).sort();
+  };
 
-// Function to send paginated chapters list
-const sendChaptersList = async (chapters: string[], page: number = 1, perPage: number = 10) => {
-const totalPages = Math.ceil(chapters.length / perPage);
-const start = (page - 1) * perPage;
-const end = start + perPage;
-const paginatedChapters = chapters.slice(start, end);
+  // Function to create and publish Telegraph page with chapters
+  const createTelegraphPage = async (chapters: string[]) => {
+    try {
+      const content = [
+        { tag: 'h1', children: ['Available Chapters'] },
+        { tag: 'p', children: ['Copy and paste any chapter name with /chapter command to get quizzes. Example: /chapter living world 2'] },
+        ...chapters.map(ch => ({
+          tag: 'p',
+          children: [`/chapter ${ch}`],
+        })),
+      ];
 
-let message = `Available chapters (Page ${page}/${totalPages}):\n`;    
-message += paginatedChapters.map(ch => `/chapter ${ch} <number>`).join('\n');    
+      const response = await fetch('https://api.telegra.ph/createPage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: 'YOUR_TELEGRAPH_ACCESS_TOKEN', // Replace with your Telegraph access token
+          title: 'Available Quiz Chapters',
+          content: JSON.stringify(content),
+          return_content: false,
+        }),
+      });
 
-const buttons: any[] = [];    
-if (page > 1) buttons.push({ text: '⬅️ Previous', callback_data: `chapters:${page - 1}` });    
-if (page < totalPages) buttons.push({ text: 'Next ➡️', callback_data: `chapters:${page + 1}` });    
+      const result = await response.json();
+      if (result.ok) {
+        return result.result.url;
+      } else {
+        throw new Error('Failed to create Telegraph page');
+      }
+    } catch (err) {
+      debug('Error creating Telegraph page:', err);
+      throw err;
+    }
+  };
 
-await ctx.reply(message, {    
-  reply_markup: {    
-    inline_keyboard: [buttons],    
-  },    
-});
+  // Handle /chapter command
+  if (chapterMatch) {
+    const chapterName = chapterMatch[1].trim();
+    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
 
-};
+    try {
+      const allQuestions = await fetchQuestions();
+      const filteredByChapter = allQuestions.filter(
+        (q: any) => q.chapter?.toLowerCase().trim() === chapterName.toLowerCase()
+      );
 
-// Handle callback queries for pagination
-if ('callback_query' in ctx && ctx.callbackQuery && 'data' in ctx.callbackQuery) {
-const data = ctx.callbackQuery.data;
-if (data.startsWith('chapters:')) {
-const page = parseInt(data.split(':')[1], 10);
-try {
-const allQuestions = await fetchQuestions();
-const chapters = getUniqueChapters(allQuestions);
-await sendChaptersList(chapters, page);
-} catch (err) {
-await ctx.reply('Failed to load chapters.');
-}
-return;
-}
-}
+      // Check if chapter exists
+      if (!filteredByChapter.length) {
+        const chapters = getUniqueChapters(allQuestions);
+        const telegraphUrl = await createTelegraphPage(chapters);
+        await ctx.reply(
+          `No questions found for chapter "${chapterName}".\n` +
+          `Please use a valid chapter name. Visit this link to see all available chapters: ${telegraphUrl}`
+        );
+        return;
+      }
 
-// Handle /chapter command
-if (chapterMatch) {
-const chapterName = chapterMatch[1].trim();
-const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
+      // Select random questions
+      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
 
-try {    
-  const allQuestions = await fetchQuestions();    
-  const filteredByChapter = allQuestions.filter(    
-    (q: any) => q.chapter?.toLowerCase().trim() === chapterName.toLowerCase()    
-  );    
+      if (!selected.length) {
+        await ctx.reply(`No questions available for chapter "${chapterName}".`);
+        return;
+      }
 
-  // Check if chapter exists    
-  if (!filteredByChapter.length) {    
-    const chapters = getUniqueChapters(allQuestions);    
-    // Create Telegraph page with chapter list
-const Telegraph = await import('telegra.ph');
-const telegraphTitle = 'Available Quiz Chapters';
-const chapters = getUniqueChapters(allQuestions);
-const contentHtml = chapters
-  .map(ch => `<p><code>/chapter ${ch.toLowerCase().replace(/\s+/g, ' ')} 2</code></p>`)
-  .join('');
+      // Send questions as polls
+      for (const question of selected) {
+        const options = [question.options.A, question.options.B, question.options.C, question.options.D];
+        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-let link: string;
-try {
-  const page = await Telegraph.createPage(telegraphTitle, contentHtml, {
-    author_name: 'Quiz Bot',
-  });
-  link = page.url;
-} catch (err) {
-  debug('Telegraph creation failed', err);
-  link = 'https://telegra.ph'; // fallback
-}
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
+        }
 
-await ctx.reply(
-  `Dear user, no questions found for chapter "${chapterName}".\n` +
-  `Please use a valid chapter name, e.g., /chapter living world 2\n\n` +
-  `Tap below to view all chapters:\n${link}`
-);
+        await ctx.sendPoll(question.question, options, {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any);
+      }
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      await ctx.reply('Oops! Failed to load questions.');
+    }
+    return;
+  }
 
-  // Select random questions    
-  const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());    
-  const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));    
+  // Existing /pyq, /b1, /c1, /p1 command handling
+  if (cmdMatch) {
+    const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
+    const subjectCode = cmdMatch[2]; // b, c, p
+    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
 
-  if (!selected.length) {    
-    await ctx.reply(`No questions available for chapter "${chapterName}".`);    
-    return;    
-  }    
+    const subjectMap: Record<string, string> = {
+      b: 'biology',
+      c: 'chemistry',
+      p: 'physics',
+    };
 
-  // Send questions as polls    
-  for (const question of selected) {    
-    const options = [question.options.A, question.options.B, question.options.C, question.options.D];    
-    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);    
+    let subject: string | null = null;
+    let isMixed = false;
 
-    if (question.image) {    
-      await ctx.replyWithPhoto({ url: question.image });    
-    }    
+    if (cmd === 'pyq') {
+      isMixed = true;
+    } else if (subjectCode) {
+      subject = subjectMap[subjectCode];
+    } else if (['b1', 'c1', 'p1'].includes(cmd)) {
+      subject = subjectMap[cmd[0]];
+    }
 
-    await ctx.sendPoll(question.question, options, {    
-      type: 'quiz',    
-      correct_option_id: correctOptionIndex,    
-      is_anonymous: false,    
-      explanation: question.explanation || 'No explanation provided.',    
-    } as any);    
-  }    
-} catch (err) {    
-  debug('Error fetching questions:', err);    
-  await ctx.reply('Oops! Failed to load questions.');    
-}    
-return;
+    try {
+      const allQuestions = await fetchQuestions();
+      let filtered = isMixed
+        ? allQuestions
+        : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
 
-}
+      if (!filtered.length) {
+        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+        return;
+      }
 
-// Existing /pyq, /b1, /c1, /p1 command handling
-if (cmdMatch) {
-const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-const subjectCode = cmdMatch[2]; // b, c, p
-const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
+      const shuffled = filtered.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filtered.length));
 
-const subjectMap: Record<string, string> = {    
-  b: 'biology',    
-  c: 'chemistry',    
-  p: 'physics',    
-};    
+      for (const question of selected) {
+        const options = [question.options.A, question.options.B, question.options.C, question.options.D];
+        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-let subject: string | null = null;    
-let isMixed = false;    
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
+        }
 
-if (cmd === 'pyq') {    
-  isMixed = true;    
-} else if (subjectCode) {    
-  subject = subjectMap[subjectCode];    
-} else if (['b1', 'c1', 'p1'].includes(cmd)) {    
-  subject = subjectMap[cmd[0]];    
-}    
-
-try {    
-  const allQuestions = await fetchQuestions();    
-  let filtered = isMixed    
-    ? allQuestions    
-    : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);    
-
-  if (!filtered.length) {    
-    await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);    
-    return;    
-  }    
-
-  const shuffled = filtered.sort(() => 0.5 - Math.random());    
-  const selected = shuffled.slice(0, Math.min(count, filtered.length));    
-
-  for (const question of selected) {    
-    const options = [question.options.A, question.options.B, question.options.C, question.options.D];    
-    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);    
-
-    if (question.image) {    
-      await ctx.replyWithPhoto({ url: question.image });    
-    }    
-
-    await ctx.sendPoll(question.question, options, {    
-      type: 'quiz',    
-      correct_option_id: correctOptionIndex,    
-      is_anonymous: false,    
-      explanation: question.explanation || 'No explanation provided.',    
-    } as any);    
-  }    
-} catch (err) {    
-  debug('Error fetching questions:', err);    
-  await ctx.reply('Oops! Failed to load questions.');    
-}
-
-}
+        await ctx.sendPoll(question.question, options, {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any);
+      }
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      await ctx.reply('Oops! Failed to load questions.');
+    }
+  }
 };
 
 export { quizes };
