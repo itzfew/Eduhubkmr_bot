@@ -16,6 +16,9 @@ import { me } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 
+// Import fetchQuestions and getUniqueChapters from quizes module
+import { fetchQuestions, getUniqueChapters } from './text'; // Assuming quizes is exported from './text'
+
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
@@ -36,6 +39,8 @@ interface PendingQuestion {
     image?: string;
   }>;
   expectingImageFor?: string; // Track poll ID awaiting an image
+  awaitingChapterSelection?: boolean; // Track if waiting for chapter number
+  chapters?: string[]; // Store chapters list for selection
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
@@ -175,26 +180,71 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
 
   if (command.includes('__')) {
     const [subj, chp] = command.split('__');
-    subject = subj.replace('add', '').replace(/_/g, ' ');
+    subject = subj.replace('add', '').replace(/_/g, ' ').toLowerCase();
     chapter = chp.replace(/_/g, ' ');
   } else {
-    subject = command.replace('add', '').replace(/_/g, ' ');
+    subject = command.replace('add', '').replace(/_/g, ' ').toLowerCase();
   }
 
-  // Store pending submission
-  pendingSubmissions[ctx.from.id] = {
-    subject,
-    chapter,
-    count,
-    questions: [],
-    expectingImageFor: undefined,
-  };
+  // Validate subject
+  const validSubjects = ['biology', 'physics', 'chemistry'];
+  if (!validSubjects.includes(subject)) {
+    return ctx.reply(`Invalid subject. Please use one of: ${validSubjects.join(', ')}.`);
+  }
 
-  await ctx.reply(
-    `Okay, please share ${count} questions for *${subject}* (Chapter: *${chapter}*) as Telegram quiz polls. ` +
-    `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
-    `After sending a poll, you can optionally send an image URL for it.`
-  , { parse_mode: 'Markdown' });
+  if (command.includes('__')) {
+    // Direct chapter specified, proceed with submission
+    pendingSubmissions[ctx.from.id] = {
+      subject,
+      chapter,
+      count,
+      questions: [],
+      expectingImageFor: undefined,
+      awaitingChapterSelection: false,
+    };
+
+    await ctx.reply(
+      `Okay, please share ${count} questions for *${subject}* (Chapter: *${chapter}*) as Telegram quiz polls. ` +
+      `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
+      `After sending a poll, you can optionally send an image URL for it.`,
+      { parse_mode: 'Markdown' }
+    );
+  } else {
+    // Fetch and display chapters for the subject
+    try {
+      const questions = await fetchQuestions(subject);
+      const chapters = getUniqueChapters(questions);
+
+      if (!chapters.length) {
+        return ctx.reply(`No chapters found for *${subject}*.`, { parse_mode: 'Markdown' });
+      }
+
+      // Store pending submission with chapters list and flag for chapter selection
+      pendingSubmissions[ctx.from.id] = {
+        subject,
+        chapter: '',
+        count,
+        questions: [],
+        expectingImageFor: undefined,
+        awaitingChapterSelection: true,
+        chapters,
+      };
+
+      // Format chapters with numbering
+      const chaptersList = chapters
+        .map((chapter, index) => `${index + 1}. ${chapter}`)
+        .join('\n');
+
+      await ctx.reply(
+        `📚 *Available Chapters for ${subject}:*\n\n${chaptersList}\n\n` +
+        `Please reply with the chapter number (e.g., 3) to select a chapter.`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (err) {
+      console.error('Error fetching chapters:', err);
+      await ctx.reply('❌ Error: Unable to fetch chapters. Please try again.');
+    }
+  }
 });
 
 // User greeting and message handling
@@ -264,6 +314,32 @@ bot.on('message', async (ctx) => {
         console.error('Failed to send swipe reply:', err);
       }
     }
+    return;
+  }
+
+  // Handle chapter number selection for admin
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
+    const submission = pendingSubmissions[chat.id];
+    const chapterNumber = parseInt(msg.text.trim(), 10);
+
+    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > submission.chapters!.length) {
+      await ctx.reply(
+        `Invalid chapter number. Please select a number between 1 and ${submission.chapters!.length}.`
+      );
+      return;
+    }
+
+    // Save the selected chapter
+    submission.chapter = submission.chapters![chapterNumber - 1];
+    submission.awaitingChapterSelection = false;
+
+    await ctx.reply(
+      `Okay, chapter *${submission.chapter}* selected for *${submission.subject}*. ` +
+      `Please share ${submission.count} questions as Telegram quiz polls. ` +
+      `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
+      `After sending a poll, you can optionally send an image URL for it.`,
+      { parse_mode: 'Markdown' }
+    );
     return;
   }
 
