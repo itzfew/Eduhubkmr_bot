@@ -1,5 +1,6 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
+import { TelegraPh } from 'telegraph-uploader'; // You'll need to install this package
 
 const debug = createDebug('bot:quizes');
 
@@ -29,19 +30,65 @@ const quizes = () => async (ctx: Context) => {
     return Array.from(chapters).filter(ch => ch).sort();
   };
 
+  // Function to create a Telegraph page with chapters list
+  const createTelegraphPage = async (chapters: string[]) => {
+    try {
+      const telegraph = new TelegraPh();
+      
+      // Generate current date and time for the title
+      const now = new Date();
+      const dateTimeString = now.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+      
+      // Create HTML content for the page
+      let content = '<h4>📚 Available Chapters</h4><br/>';
+      content += `<p><i>Last updated: ${dateTimeString}</i></p><br/>`;
+      
+      // Add chapters list
+      content += '<ul>';
+      chapters.forEach(chapter => {
+        content += `<li>${chapter}</li>`;
+      });
+      content += '</ul><br/>';
+      
+      content += '<p>To get questions from a chapter, use:</p>';
+      content += '<code>/chapter [name] [count]</code><br/>';
+      content += '<p>Example:</p>';
+      content += '<code>/chapter living world 2</code>';
+      
+      // Create the page
+      const page = await telegraph.createPage({
+        title: `EduHub Chapters - ${dateTimeString}`,
+        author_name: 'EduHub Bot',
+        author_url: 'https://t.me/your_bot_username',
+        content: content
+      });
+      
+      return page.url;
+    } catch (err) {
+      debug('Error creating Telegraph page:', err);
+      throw err;
+    }
+  };
+
   // Function to generate chapters list message with Telegraph link
   const getChaptersMessage = async () => {
     try {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
       
-      // In a real implementation, you would create a Telegraph page here
-      // and get the actual URL. For now, we'll use a placeholder.
-      const telegraphUrl = "https://telegra.ph/Eduhub-Chapters-List";
+      // Create a new Telegraph page
+      const telegraphUrl = await createTelegraphPage(chapters);
       
       return {
         message: `📚 <b>Available Chapters</b>\n\n` +
-                `View all chapters here: ${telegraphUrl}\n\n` +
+                `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
                 `Then use: <code>/chapter [name] [count]</code>\n` +
                 `Example: <code>/chapter living world 2</code>`,
         chapters
