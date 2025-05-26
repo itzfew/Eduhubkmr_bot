@@ -8,14 +8,11 @@ const quizes = () => async (ctx: Context) => {
 
   if (!ctx.message || !('text' in ctx.message)) return;
 
-  const text = ctx.message.text.trim().toLowerCase();
-  const match = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const text = ctx.message.text.trim();
+  const lowerText = text.toLowerCase();
 
-  if (!match) return;
-
-  const cmd = match[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-  const subjectCode = match[2]; // b, c, p
-  const count = match[3] ? parseInt(match[3].trim(), 10) : 1;
+  const legacyMatch = lowerText.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const customMatch = text.match(/^\/pyq\s+(.+?)(?:\s+(\d+))?$/i);
 
   const subjectMap: Record<string, string> = {
     b: 'biology',
@@ -23,27 +20,47 @@ const quizes = () => async (ctx: Context) => {
     p: 'physics',
   };
 
+  let filterChapter: string | null = null;
   let subject: string | null = null;
+  let count = 1;
   let isMixed = false;
 
-  if (cmd === 'pyq') {
+  if (legacyMatch) {
+    const cmd = legacyMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
+    const subjectCode = legacyMatch[2]; // b, c, p
+    count = legacyMatch[3] ? parseInt(legacyMatch[3].trim(), 10) : 1;
+
+    if (cmd === 'pyq') {
+      isMixed = true;
+    } else if (subjectCode) {
+      subject = subjectMap[subjectCode];
+    } else if (['b1', 'c1', 'p1'].includes(cmd)) {
+      subject = subjectMap[cmd[0]];
+    }
+  } else if (customMatch) {
+    filterChapter = customMatch[1].trim().toLowerCase(); // e.g., 'living world'
+    count = customMatch[2] ? parseInt(customMatch[2].trim(), 10) : 1;
     isMixed = true;
-  } else if (subjectCode) {
-    subject = subjectMap[subjectCode];
-  } else if (['b1', 'c1', 'p1'].includes(cmd)) {
-    subject = subjectMap[cmd[0]];
+  } else {
+    return; // not a supported command
   }
 
   try {
     const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/master/quiz.json');
     const allQuestions = await response.json();
 
-    let filtered = isMixed
-      ? allQuestions
-      : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
+    let filtered = allQuestions;
+
+    if (!isMixed && subject) {
+      filtered = allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
+    }
+
+    if (filterChapter) {
+      filtered = filtered.filter((q: any) => q.chapter?.toLowerCase() === filterChapter);
+    }
 
     if (!filtered.length) {
-      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+      await ctx.reply(`No questions available for ${filterChapter || subject || 'the selected input'}.`);
       return;
     }
 
