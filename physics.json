@@ -1,0 +1,730 @@
+[
+  {
+    "subject": "Physics",
+    "chapter": "Gravitation",
+    "question": "What is the acceleration due to gravity on Earth?",
+    "options": {
+      "A": "9.8 m/s²",
+      "B": "8.9 m/s²",
+      "C": "10.2 m/s²",
+      "D": "9.2 m/s²"
+    },
+    "correct_option": "A",
+    "explanation": "The standard acceleration due to gravity on Earth is 9.8 m/s².",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Work, Energy and Power",
+    "question": "Which physical quantity is measured in Joules?",
+    "options": {
+      "A": "Force",
+      "B": "Power",
+      "C": "Energy",
+      "D": "Velocity"
+    },
+    "correct_option": "C",
+    "explanation": "Energy is measured in Joules (J) in the SI system.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Thermodynamics",
+    "question": "Which law states that energy can neither be created nor destroyed?",
+    "options": {
+      "A": "First Law of Thermodynamics",
+      "B": "Zeroth Law of Thermodynamics",
+      "C": "Second Law of Thermodynamics",
+      "D": "Law of Conservation of Momentum"
+    },
+    "correct_option": "A",
+    "explanation": "The First Law of Thermodynamics is a version of the law of conservation of energy for thermodynamic systems.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Optics",
+    "question": "Which mirror always forms a virtual, erect, and diminished image?",
+    "options": {
+      "A": "Concave mirror",
+      "B": "Convex mirror",
+      "C": "Plane mirror",
+      "D": "None"
+    },
+    "correct_option": "B",
+    "explanation": "Convex mirrors always produce virtual, erect, and diminished images regardless of the object's position.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Waves",
+    "question": "What is the unit of frequency?",
+    "options": {
+      "A": "Hertz",
+      "B": "Newton",
+      "C": "Joule",
+      "D": "Decibel"
+    },
+    "correct_option": "A",
+    "explanation": "Frequency is measured in Hertz (Hz), which is equivalent to one cycle per second.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Current Electricity",
+    "question": "Ohm’s Law states that current is directly proportional to:",
+    "options": {
+      "A": "Voltage",
+      "B": "Power",
+      "C": "Resistance",
+      "D": "Energy"
+    },
+    "correct_option": "A",
+    "explanation": "Ohm’s Law: V = IR, which shows that current (I) is directly proportional to voltage (V).",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Electromagnetic Induction",
+    "question": "Who discovered electromagnetic induction?",
+    "options": {
+      "A": "Ampere",
+      "B": "Faraday",
+      "C": "Maxwell",
+      "D": "Ohm"
+    },
+    "correct_option": "B",
+    "explanation": "Michael Faraday discovered electromagnetic induction in 1831.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Modern Physics",
+    "question": "Which particle has no charge?",
+    "options": {
+      "A": "Proton",
+      "B": "Neutron",
+      "C": "Electron",
+      "D": "Positron"
+    },
+    "correct_option": "B",
+    "explanation": "Neutrons are electrically neutral particles found in the nucleus of atoms.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Electrostatics",
+    "question": "Coulomb's law is applicable to:",
+    "options": {
+      "A": "Current carrying wires",
+      "B": "Stationary point charges",
+      "C": "Moving charges",
+      "D": "Charged capacitors"
+    },
+    "correct_option": "B",
+    "explanation": "Coulomb's law applies to the electrostatic force between two stationary point charges.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "Kinetic Theory of Gases",
+    "question": "The pressure of an ideal gas is due to:",
+    "options": {
+      "A": "Collision of atoms with each other",
+      "B": "Collision of atoms with the container walls",
+      "C": "Temperature of gas",
+      "D": "Volume of gas"
+    },
+    "correct_option": "B",
+    "explanation": "In kinetic theory, pressure arises from molecules colliding with the container walls.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "semiconductor-electronics",
+    "question": "For a p-type semiconductor, which of the following statements is true?",
+    "options": {
+      "A": "Holes are the majority carriers and trivalent atoms are the dopants.",
+      "B": "Holes are the majority carriers and pentavalent atoms are the dopants.",
+      "C": "Electrons are the majority carriers and pentavalent atoms are the dopants",
+      "D": "Electrons are the majority carriers and trivalent atoms are the dopants."
+    },
+    "correct_option": "A",
+    "explanation": "In p-type semiconductor, an intrinsic semiconductor is doped with trivalent impurities, that creates deficiencies of valence electrons called holes which are majority charge carriers.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "gravitation",
+    "question": "The kinetic energies of a planet in an elliptical orbit about the Sun, at positions A, B and C are KA, KB and KC, respectively. AC is the major axis and SB is perpendicular to AC at the position of the Sun S as shown in the figure.",
+    "options": {
+      "A": "KA < KB < KC",
+      "B": "KA > KB > KC",
+      "C": "KB < KA < KC",
+      "D": "KB > KA > KC"
+    },
+    "correct_option": "B",
+    "explanation": "Speed of the planet will be maximum when its distance from the sun is minimum as mvr = constant.",
+    "image": "https://neetcare-image.cdn.examgoal.net/1qpqahkka42m8vz/026398ad-536b-4002-bc25-78353ce615cf/5da120f0-9465-11ea-aedc-f1c8d8e0194b/file-1qpqahkka42m8w0-333w.png"
+  },
+  {
+    "subject": "Physics",
+    "chapter": "units-and-measurements",
+    "question": "Which of the following pairs has the same dimensions?",
+    "options": {
+      "A": "Impulse and momentum",
+      "B": "Force and power",
+      "C": "Torque and energy",
+      "D": "Work and velocity"
+    },
+    "correct_option": "A",
+    "explanation": "Impulse and momentum both have the dimensions of MLT⁻¹.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "motion-in-a-straight-line",
+    "question": "A particle moves with uniform acceleration. The displacement-time graph is a:",
+    "options": {
+      "A": "Straight line",
+      "B": "Parabola",
+      "C": "Hyperbola",
+      "D": "Circle"
+    },
+    "correct_option": "B",
+    "explanation": "For uniform acceleration, displacement is a quadratic function of time: s = ut + ½at².",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "laws-of-motion",
+    "question": "The inertia of a body depends on its:",
+    "options": {
+      "A": "Velocity",
+      "B": "Volume",
+      "C": "Mass",
+      "D": "Acceleration"
+    },
+    "correct_option": "C",
+    "explanation": "Inertia is the tendency of a body to resist change in motion and is proportional to mass.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "work-energy-and-power",
+    "question": "A body of mass 5 kg is lifted up by 10 m. The work done is (g = 10 m/s²):",
+    "options": {
+      "A": "50 J",
+      "B": "500 J",
+      "C": "5 J",
+      "D": "100 J"
+    },
+    "correct_option": "B",
+    "explanation": "Work done = mgh = 5 × 10 × 10 = 500 J.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "system-of-particles-and-rotational-motion",
+    "question": "The moment of inertia of a thin ring about its diameter is:",
+    "options": {
+      "A": "MR²",
+      "B": "½MR²",
+      "C": "¼MR²",
+      "D": "½MR"
+    },
+    "correct_option": "B",
+    "explanation": "Moment of inertia of a ring about its diameter is (½)MR².",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "gravitation",
+    "question": "The weight of a body is maximum at:",
+    "options": {
+      "A": "Equator",
+      "B": "Poles",
+      "C": "Centre of Earth",
+      "D": "Mountains"
+    },
+    "correct_option": "B",
+    "explanation": "g is maximum at poles due to minimal centrifugal effect and Earth's shape.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "mechanical-properties-of-solids",
+    "question": "Which modulus is involved in the change of shape at constant volume?",
+    "options": {
+      "A": "Young’s modulus",
+      "B": "Bulk modulus",
+      "C": "Shear modulus",
+      "D": "Modulus of rigidity"
+    },
+    "correct_option": "C",
+    "explanation": "Shear modulus (also called modulus of rigidity) relates to shape change without volume change.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "mechanical-properties-of-fluids",
+    "question": "The pressure at a depth h in a liquid of density ρ is:",
+    "options": {
+      "A": "ρgh",
+      "B": "ρh",
+      "C": "gh",
+      "D": "h/ρg"
+    },
+    "correct_option": "A",
+    "explanation": "Hydrostatic pressure = ρgh.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "thermal-properties-of-matter",
+    "question": "The temperature at which Celsius and Fahrenheit scales read the same is:",
+    "options": {
+      "A": "0°",
+      "B": "100°",
+      "C": "-40°",
+      "D": "-273°"
+    },
+    "correct_option": "C",
+    "explanation": "At -40°, both Celsius and Fahrenheit scales read the same.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "thermodynamics",
+    "question": "Which law states that entropy of the universe always increases?",
+    "options": {
+      "A": "Zeroth law",
+      "B": "First law",
+      "C": "Second law",
+      "D": "Third law"
+    },
+    "correct_option": "C",
+    "explanation": "The second law of thermodynamics states that the total entropy of an isolated system can never decrease.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "kinetic-theory-of-gases",
+    "question": "In kinetic theory, pressure of an ideal gas is given by:",
+    "options": {
+      "A": "½ m n c²",
+      "B": "⅓ ρ c²",
+      "C": "½ ρ c²",
+      "D": "⅔ ρ c²"
+    },
+    "correct_option": "B",
+    "explanation": "Pressure P = (1/3)ρc², where ρ is density and c is rms speed.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "oscillations",
+    "question": "The time period of a simple pendulum is proportional to:",
+    "options": {
+      "A": "Length",
+      "B": "√Length",
+      "C": "1/√Length",
+      "D": "1/Length"
+    },
+    "correct_option": "B",
+    "explanation": "T = 2π√(L/g), so time period is proportional to √L.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "waves",
+    "question": "Speed of sound in a medium depends on:",
+    "options": {
+      "A": "Wavelength only",
+      "B": "Frequency only",
+      "C": "Properties of medium",
+      "D": "Amplitude"
+    },
+    "correct_option": "C",
+    "explanation": "Speed of sound is determined by medium's elasticity and density, not by frequency.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "ray-optics",
+    "question": "The angle of incidence for which the angle of refraction is 90° is called:",
+    "options": {
+      "A": "Brewster angle",
+      "B": "Critical angle",
+      "C": "Glancing angle",
+      "D": "Reflex angle"
+    },
+    "correct_option": "B",
+    "explanation": "Critical angle is the angle of incidence where refraction angle becomes 90°, leading to total internal reflection.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "wave-optics",
+    "question": "In Young’s double slit experiment, fringe width is directly proportional to:",
+    "options": {
+      "A": "Wavelength",
+      "B": "Distance between slits",
+      "C": "Slit width",
+      "D": "Refractive index"
+    },
+    "correct_option": "A",
+    "explanation": "Fringe width β = λD/d; it's directly proportional to wavelength λ.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "electrostatics",
+    "question": "The SI unit of electric field is:",
+    "options": {
+      "A": "N",
+      "B": "N/C",
+      "C": "V",
+      "D": "C/N"
+    },
+    "correct_option": "B",
+    "explanation": "Electric field E = F/q, so unit is N/C.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "current-electricity",
+    "question": "Ohm’s law is valid for:",
+    "options": {
+      "A": "Diodes",
+      "B": "Electrolytes",
+      "C": "Vacuum tubes",
+      "D": "Metallic conductors"
+    },
+    "correct_option": "D",
+    "explanation": "Ohm’s law applies to metallic conductors where V ∝ I.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "moving-charges-and-magnetism",
+    "question": "A current carrying conductor produces:",
+    "options": {
+      "A": "Electric field only",
+      "B": "Magnetic field only",
+      "C": "Electric and magnetic fields",
+      "D": "No field"
+    },
+    "correct_option": "C",
+    "explanation": "A current-carrying wire generates both electric and magnetic fields around it.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "magnetism-and-matter",
+    "question": "The SI unit of magnetic moment is:",
+    "options": {
+      "A": "A/m",
+      "B": "Am²",
+      "C": "Tm²",
+      "D": "A/m²"
+    },
+    "correct_option": "B",
+    "explanation": "Magnetic moment M = current × area, so unit is A·m².",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "electromagnetic-induction",
+    "question": "Lenz’s law is based on the law of conservation of:",
+    "options": {
+      "A": "Charge",
+      "B": "Momentum",
+      "C": "Mass",
+      "D": "Energy"
+    },
+    "correct_option": "D",
+    "explanation": "Lenz’s law opposes the cause of induced EMF to conserve energy.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "alternating-current",
+    "question": "In a purely resistive AC circuit, the current and voltage are:",
+    "options": {
+      "A": "In phase",
+      "B": "Out of phase by 90°",
+      "C": "Opposite in phase",
+      "D": "None of these"
+    },
+    "correct_option": "A",
+    "explanation": "In a purely resistive circuit, voltage and current vary sinusoidally and are in phase.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "electromagnetic-waves",
+    "question": "The electromagnetic wave does not require a medium because:",
+    "options": {
+      "A": "It is a longitudinal wave",
+      "B": "It travels at infinite speed",
+      "C": "It consists of changing electric and magnetic fields",
+      "D": "It has very short wavelength"
+    },
+    "correct_option": "C",
+    "explanation": "EM waves are self-sustaining due to mutually generating electric and magnetic fields.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "dual-nature-of-radiation-and-matter",
+    "question": "Which experiment proved the particle nature of light?",
+    "options": {
+      "A": "Photoelectric effect",
+      "B": "Young's experiment",
+      "C": "Polarization",
+      "D": "Diffraction"
+    },
+    "correct_option": "A",
+    "explanation": "Photoelectric effect shows that light behaves like particles (photons) delivering energy in quanta.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "atoms",
+    "question": "In hydrogen atom, the total energy of the electron in the nth orbit is:",
+    "options": {
+      "A": "Directly proportional to n",
+      "B": "Inversely proportional to n",
+      "C": "Directly proportional to 1/n²",
+      "D": "Inversely proportional to n²"
+    },
+    "correct_option": "D",
+    "explanation": "Eₙ = –13.6/n² eV, hence energy ∝ 1/n² (inverse square).",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "nuclei",
+    "question": "The mass defect of a nucleus is due to:",
+    "options": {
+      "A": "Loss of electrons",
+      "B": "Presence of neutrons",
+      "C": "Binding energy",
+      "D": "Nuclear forces"
+    },
+    "correct_option": "C",
+    "explanation": "Mass defect converts into binding energy which holds the nucleus together.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "semiconductor-electronics",
+    "question": "A p-n junction diode is used as:",
+    "options": {
+      "A": "Amplifier",
+      "B": "Oscillator",
+      "C": "Rectifier",
+      "D": "Filter"
+    },
+    "correct_option": "C",
+    "explanation": "A p-n junction allows current in one direction and blocks in other – used as rectifier.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "communication-systems",
+    "question": "In amplitude modulation:",
+    "options": {
+      "A": "Amplitude of carrier wave is changed",
+      "B": "Frequency of carrier wave is changed",
+      "C": "Phase of carrier wave is changed",
+      "D": "None of these"
+    },
+    "correct_option": "A",
+    "explanation": "In AM, the amplitude of the carrier wave varies with the signal.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "gravitation",
+    "question": "The escape velocity from Earth depends on:",
+    "options": {
+      "A": "Mass of the body",
+      "B": "Mass of Earth only",
+      "C": "Radius of Earth only",
+      "D": "Both mass and radius of Earth"
+    },
+    "correct_option": "D",
+    "explanation": "vₑ = √(2GM/R), so it depends on both mass and radius of the Earth.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "mechanical-properties-of-fluids",
+    "question": "The SI unit of surface tension is:",
+    "options": {
+      "A": "N/m",
+      "B": "J/m",
+      "C": "N/m²",
+      "D": "N·m"
+    },
+    "correct_option": "A",
+    "explanation": "Surface tension = Force/Length, unit is N/m.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "thermodynamics",
+    "question": "Which law states that heat cannot spontaneously flow from a colder body to a hotter body?",
+    "options": {
+      "A": "Zeroth law",
+      "B": "First law",
+      "C": "Second law",
+      "D": "Third law"
+    },
+    "correct_option": "C",
+    "explanation": "Second law of thermodynamics states that heat cannot flow from cold to hot spontaneously.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "kinematics",
+    "question": "If a body is moving with uniform acceleration, its velocity-time graph will be:",
+    "options": {
+      "A": "A curve",
+      "B": "A straight line parallel to time axis",
+      "C": "A straight line with constant slope",
+      "D": "A parabola"
+    },
+    "correct_option": "C",
+    "explanation": "In uniform acceleration, velocity increases linearly with time, giving a straight line with constant slope.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "laws-of-motion",
+    "question": "The property of a body to resist change in its state is called:",
+    "options": {
+      "A": "Impulse",
+      "B": "Momentum",
+      "C": "Inertia",
+      "D": "Force"
+    },
+    "correct_option": "C",
+    "explanation": "Inertia is the tendency of a body to resist a change in its state of motion or rest.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "work-energy-and-power",
+    "question": "Work done is said to be zero when:",
+    "options": {
+      "A": "Displacement is zero",
+      "B": "Force is zero",
+      "C": "Both force and displacement are perpendicular",
+      "D": "All of these"
+    },
+    "correct_option": "D",
+    "explanation": "W = F·d·cosθ; work is zero when force is zero, displacement is zero, or angle = 90°.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "system-of-particles-and-rotational-motion",
+    "question": "The moment of inertia of a ring about its diameter is:",
+    "options": {
+      "A": "MR²",
+      "B": "½MR²",
+      "C": "¼MR²",
+      "D": "0"
+    },
+    "correct_option": "B",
+    "explanation": "For a ring about its diameter, I = ½MR².",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "mechanical-properties-of-solids",
+    "question": "Young’s modulus is defined as the ratio of:",
+    "options": {
+      "A": "Stress to strain",
+      "B": "Strain to stress",
+      "C": "Force to area",
+      "D": "Force to length"
+    },
+    "correct_option": "A",
+    "explanation": "Young’s modulus (Y) = stress/strain.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "thermal-properties-of-matter",
+    "question": "The temperature at which Celsius and Fahrenheit scales are equal is:",
+    "options": {
+      "A": "0°",
+      "B": "–273°",
+      "C": "–40°",
+      "D": "100°"
+    },
+    "correct_option": "C",
+    "explanation": "C = F = –40° is the point where both scales show the same reading.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "kinetic-theory",
+    "question": "Degree of freedom of a monoatomic gas is:",
+    "options": {
+      "A": "2",
+      "B": "3",
+      "C": "5",
+      "D": "6"
+    },
+    "correct_option": "B",
+    "explanation": "Monoatomic gas has 3 translational degrees of freedom.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "oscillations",
+    "question": "The SI unit of angular frequency is:",
+    "options": {
+      "A": "rad/s",
+      "B": "Hz",
+      "C": "s",
+      "D": "m/s"
+    },
+    "correct_option": "A",
+    "explanation": "Angular frequency (ω) is measured in radians per second (rad/s).",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "waves",
+    "question": "The speed of sound in a medium depends on:",
+    "options": {
+      "A": "Only density",
+      "B": "Only elasticity",
+      "C": "Both elasticity and density",
+      "D": "Neither"
+    },
+    "correct_option": "C",
+    "explanation": "v = √(E/ρ); speed depends on elasticity and density of the medium.",
+    "image": ""
+  },
+  {
+    "subject": "Physics",
+    "chapter": "electrostatics",
+    "question": "Coulomb’s law in vector form is:",
+    "options": {
+      "A": "F = kq₁q₂/r",
+      "B": "F = kq₁q₂/r² r̂",
+      "C": "F = kq₁q₂r̂",
+      "D": "F = kq₁q₂/r²"
+    },
+    "correct_option": "B",
+    "explanation": "Coulomb's law vector form: F = kq₁q₂/r² × r̂.",
+    "image": ""
+  }
+]
