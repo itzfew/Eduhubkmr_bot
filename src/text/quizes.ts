@@ -8,19 +8,20 @@ const quizes = () => async (ctx: Context) => {
 
   if (!ctx.message || !('text' in ctx.message)) return;
 
-  const text = ctx.message.text.trim().toLowerCase();
-  const match = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const text = ctx.message.text.trim();
+  const commandMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(?:\s+(\d+))?(?:\s+(.*))?$/i);
 
-  if (!match) return;
+  if (!commandMatch) return;
 
-  const cmd = match[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-  const subjectCode = match[2]; // b, c, p
-  const count = match[3] ? parseInt(match[3].trim(), 10) : 1;
+  const cmd = commandMatch[1].toLowerCase(); // e.g. pyqb
+  const subjectCode = commandMatch[2]?.toLowerCase(); // b, c, p
+  const count = commandMatch[3] ? parseInt(commandMatch[3], 10) : 1;
+  const chapterQuery = commandMatch[4]?.trim().toLowerCase() || null;
 
   const subjectMap: Record<string, string> = {
-    b: 'biology',
-    c: 'chemistry',
-    p: 'physics',
+    b: 'Biology',
+    c: 'Chemistry',
+    p: 'Physics',
   };
 
   let subject: string | null = null;
@@ -38,12 +39,20 @@ const quizes = () => async (ctx: Context) => {
     const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/master/quiz.json');
     const allQuestions = await response.json();
 
-    let filtered = isMixed
-      ? allQuestions
-      : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
+    let filtered = allQuestions;
+
+    if (!isMixed && subject) {
+      filtered = filtered.filter((q: any) => q.subject?.toLowerCase() === subject.toLowerCase());
+    }
+
+    if (chapterQuery) {
+      filtered = filtered.filter((q: any) =>
+        q.chapter?.toLowerCase().includes(chapterQuery)
+      );
+    }
 
     if (!filtered.length) {
-      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+      await ctx.reply(`No questions found for ${subject || 'mixed subjects'}${chapterQuery ? ` in chapter "${chapterQuery}"` : ''}.`);
       return;
     }
 
