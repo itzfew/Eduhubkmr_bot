@@ -1,0 +1,604 @@
+[
+  {
+    "subject": "Chemistry",
+    "chapter": "Some Basic Concepts of Chemistry",
+    "question": "Which of the following is the SI unit of amount of substance?",
+    "options": {
+      "A": "Kilogram",
+      "B": "Mole",
+      "C": "Liter",
+      "D": "Gram"
+    },
+    "correct_option": "B",
+    "explanation": "The SI unit of the amount of substance is the mole.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Structure of Atom",
+    "question": "Which of the following particles has the least mass?",
+    "options": {
+      "A": "Neutron",
+      "B": "Proton",
+      "C": "Electron",
+      "D": "Alpha particle"
+    },
+    "correct_option": "C",
+    "explanation": "Electron has the least mass among the subatomic particles listed.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Periodic Table",
+    "question": "What is the period number of an element with the electronic configuration 2, 8, 4?",
+    "options": {
+      "A": "2",
+      "B": "3",
+      "C": "4",
+      "D": "5"
+    },
+    "correct_option": "B",
+    "explanation": "The number of shells determines the period, so 2, 8, 4 means 3 shells → Period 3.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Chemical Bonding",
+    "question": "Which of the following is a polar covalent molecule?",
+    "options": {
+      "A": "O2",
+      "B": "H2",
+      "C": "HCl",
+      "D": "Cl2"
+    },
+    "correct_option": "C",
+    "explanation": "HCl has a difference in electronegativity between H and Cl, making it polar.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "States of Matter",
+    "question": "Which of the following gases will diffuse the fastest?",
+    "options": {
+      "A": "Cl2",
+      "B": "O2",
+      "C": "H2",
+      "D": "CO2"
+    },
+    "correct_option": "C",
+    "explanation": "According to Graham’s law, lighter gases diffuse faster. H2 is the lightest.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Thermodynamics",
+    "question": "Which of the following quantities is a state function?",
+    "options": {
+      "A": "Work",
+      "B": "Heat",
+      "C": "Internal Energy",
+      "D": "Path"
+    },
+    "correct_option": "C",
+    "explanation": "Internal energy depends only on the state of the system, not the path.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Equilibrium",
+    "question": "At equilibrium:",
+    "options": {
+      "A": "Forward reaction stops",
+      "B": "Backward reaction stops",
+      "C": "Rates of forward and backward reactions are equal",
+      "D": "Concentrations of reactants and products are equal"
+    },
+    "correct_option": "C",
+    "explanation": "At equilibrium, the rate of the forward and backward reactions become equal.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Redox Reactions",
+    "question": "Oxidation involves:",
+    "options": {
+      "A": "Gain of electrons",
+      "B": "Loss of electrons",
+      "C": "Gain of protons",
+      "D": "Loss of neutrons"
+    },
+    "correct_option": "B",
+    "explanation": "Oxidation is defined as the loss of electrons.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Hydrogen",
+    "question": "Which of the following is used in the manufacture of margarine?",
+    "options": {
+      "A": "Hydrogen",
+      "B": "Oxygen",
+      "C": "Nitrogen",
+      "D": "Helium"
+    },
+    "correct_option": "A",
+    "explanation": "Hydrogen is used in the hydrogenation of oils to make margarine.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "The s-Block Element",
+    "question": "Which alkali metal is the most reactive?",
+    "options": {
+      "A": "Sodium",
+      "B": "Potassium",
+      "C": "Cesium",
+      "D": "Lithium"
+    },
+    "correct_option": "C",
+    "explanation": "Reactivity increases down the group. Cesium is more reactive than others listed.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "Organic Chemistry - Basics",
+    "question": "IUPAC name of CH3CH2OH is:",
+    "options": {
+      "A": "Ethyl alcohol",
+      "B": "Ethanol",
+      "C": "Ethene",
+      "D": "Methanol"
+    },
+    "correct_option": "B",
+    "explanation": "According to IUPAC, CH3CH2OH is named as Ethanol.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "ionic-equilibrum",
+    "question": "Which of these is least likely to act as a lewis base ?",
+    "options": {
+      "A": "BF3",
+      "B": "PF3",
+      "C": "CO",
+      "D": "F$$-$$"
+    },
+    "correct_option": "A",
+    "explanation": "BF3 acts as Lewis acid. It is electron pair acceptor.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "ionic-equilibrum",
+    "question": "Which of the following fluro-compounds is most likely to behave as a Lewis base ?",
+    "options": {
+      "A": "BF3",
+      "B": "PF3",
+      "C": "CF4",
+      "D": "SiF4"
+    },
+    "correct_option": "B",
+    "explanation": "PF3 is a Lewis base because it has a lone pair on the phosphorus atom.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "some-basic-concepts-of-chemistry",
+    "question": "Which of the following is a unit of molarity?",
+    "options": {
+      "A": "mol/kg",
+      "B": "mol/L",
+      "C": "mol/m²",
+      "D": "mol/m³"
+    },
+    "correct_option": "B",
+    "explanation": "Molarity is defined as moles of solute per litre of solution, i.e., mol/L.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "structure-of-atom",
+    "question": "The number of orbitals in a d-subshell is:",
+    "options": {
+      "A": "2",
+      "B": "3",
+      "C": "5",
+      "D": "7"
+    },
+    "correct_option": "C",
+    "explanation": "A d-subshell has 5 orbitals corresponding to magnetic quantum numbers m = –2 to +2.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "classification-of-elements-and-periodicity",
+    "question": "Which of the following has the highest electronegativity?",
+    "options": {
+      "A": "Oxygen",
+      "B": "Fluorine",
+      "C": "Chlorine",
+      "D": "Nitrogen"
+    },
+    "correct_option": "B",
+    "explanation": "Fluorine has the highest electronegativity (≈3.98) on the Pauling scale.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "chemical-bonding-and-molecular-structure",
+    "question": "Which of the following molecules has a linear shape?",
+    "options": {
+      "A": "H₂O",
+      "B": "NH₃",
+      "C": "CO₂",
+      "D": "CH₄"
+    },
+    "correct_option": "C",
+    "explanation": "CO₂ has a linear shape due to sp hybridization and no lone pairs on the central atom.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "states-of-matter",
+    "question": "Which gas shows deviation from ideal behavior at high pressure?",
+    "options": {
+      "A": "Helium",
+      "B": "Hydrogen",
+      "C": "Nitrogen",
+      "D": "All of these"
+    },
+    "correct_option": "D",
+    "explanation": "All real gases deviate from ideal behavior at high pressure due to intermolecular forces.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "thermodynamics",
+    "question": "Which of the following is a state function?",
+    "options": {
+      "A": "Work",
+      "B": "Heat",
+      "C": "Enthalpy",
+      "D": "Path"
+    },
+    "correct_option": "C",
+    "explanation": "Enthalpy is a state function, depends only on initial and final states.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "equilibrium",
+    "question": "At equilibrium, the rate of the forward reaction is:",
+    "options": {
+      "A": "Zero",
+      "B": "Less than backward reaction",
+      "C": "Equal to backward reaction",
+      "D": "Greater than backward reaction"
+    },
+    "correct_option": "C",
+    "explanation": "At equilibrium, forward and backward reaction rates are equal.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "redox-reactions",
+    "question": "In the reaction: Zn + Cu²⁺ → Zn²⁺ + Cu, Zn is:",
+    "options": {
+      "A": "Oxidised",
+      "B": "Reduced",
+      "C": "Oxidising agent",
+      "D": "Neither"
+    },
+    "correct_option": "A",
+    "explanation": "Zn loses electrons and is oxidised to Zn²⁺.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "hydrogen",
+    "question": "Which of the following is the lightest element?",
+    "options": {
+      "A": "Oxygen",
+      "B": "Hydrogen",
+      "C": "Nitrogen",
+      "D": "Helium"
+    },
+    "correct_option": "B",
+    "explanation": "Hydrogen is the lightest element with atomic number 1 and atomic mass ≈1 u.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "the-s-block-element",
+    "question": "Which alkali metal is the most reactive?",
+    "options": {
+      "A": "Lithium",
+      "B": "Sodium",
+      "C": "Potassium",
+      "D": "Cesium"
+    },
+    "correct_option": "D",
+    "explanation": "Reactivity increases down the group; cesium is the most reactive alkali metal.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "the-p-block-element",
+    "question": "Which of the following is a noble gas?",
+    "options": {
+      "A": "Nitrogen",
+      "B": "Oxygen",
+      "C": "Neon",
+      "D": "Hydrogen"
+    },
+    "correct_option": "C",
+    "explanation": "Neon is a noble gas (Group 18), chemically inert under normal conditions.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "organic-chemistry-some-basic-principles-and-techniques",
+    "question": "Which is the correct IUPAC name for CH₃-CH₂-COOH?",
+    "options": {
+      "A": "Acetic acid",
+      "B": "Propanoic acid",
+      "C": "Butanoic acid",
+      "D": "Ethanoic acid"
+    },
+    "correct_option": "B",
+    "explanation": "CH₃-CH₂-COOH is a 3-carbon carboxylic acid: Propanoic acid.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "hydrocarbons",
+    "question": "Which of the following is an alkyne?",
+    "options": {
+      "A": "Ethane",
+      "B": "Ethene",
+      "C": "Ethyne",
+      "D": "Propane"
+    },
+    "correct_option": "C",
+    "explanation": "Ethyne (C₂H₂) has a triple bond and belongs to alkynes.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "environmental-chemistry",
+    "question": "Which of the following is a greenhouse gas?",
+    "options": {
+      "A": "O₂",
+      "B": "N₂",
+      "C": "CO₂",
+      "D": "He"
+    },
+    "correct_option": "C",
+    "explanation": "Carbon dioxide (CO₂) traps heat and is a major greenhouse gas.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "solid-state",
+    "question": "Which type of solid has the highest melting point?",
+    "options": {
+      "A": "Ionic",
+      "B": "Molecular",
+      "C": "Metallic",
+      "D": "Covalent network"
+    },
+    "correct_option": "D",
+    "explanation": "Covalent network solids like diamond have very high melting points due to strong covalent bonds.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "solutions",
+    "question": "Which of the following is a colligative property?",
+    "options": {
+      "A": "Boiling point",
+      "B": "Freezing point",
+      "C": "Osmotic pressure",
+      "D": "Viscosity"
+    },
+    "correct_option": "C",
+    "explanation": "Osmotic pressure is a colligative property, depends on number of solute particles, not their nature.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "electrochemistry",
+    "question": "What is the unit of cell potential?",
+    "options": {
+      "A": "Ampere",
+      "B": "Ohm",
+      "C": "Volt",
+      "D": "Watt"
+    },
+    "correct_option": "C",
+    "explanation": "Cell potential is measured in volts (V), which is joules per coulomb.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "chemical-kinetics",
+    "question": "For a zero-order reaction, the rate is:",
+    "options": {
+      "A": "Proportional to A",
+      "B": "Constant",
+      "C": "Inversely proportional to A",
+      "D": "Proportional to A²"
+    },
+    "correct_option": "B",
+    "explanation": "In zero-order reactions, the rate is constant and independent of concentration.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "surface-chemistry",
+    "question": "Which of the following is used as a catalyst in the Haber process?",
+    "options": {
+      "A": "Nickel",
+      "B": "Iron",
+      "C": "Vanadium",
+      "D": "Platinum"
+    },
+    "correct_option": "B",
+    "explanation": "Finely divided iron is used as a catalyst in the Haber process for ammonia synthesis.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "general-principles-and-processes-of-isolation-of-elements",
+    "question": "Froth flotation process is used for the concentration of:",
+    "options": {
+      "A": "Oxide ores",
+      "B": "Sulphide ores",
+      "C": "Carbonate ores",
+      "D": "Halide ores"
+    },
+    "correct_option": "B",
+    "explanation": "Froth flotation is effective for sulphide ores due to their preferential wetting by oil.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "the-solid-state",
+    "question": "Which type of defect does not change the density of a solid?",
+    "options": {
+      "A": "Frenkel defect",
+      "B": "Schottky defect",
+      "C": "Interstitial defect",
+      "D": "Vacancy defect"
+    },
+    "correct_option": "A",
+    "explanation": "Frenkel defect involves a particle moving to an interstitial site, so no change in overall mass or volume—hence, density remains unchanged.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "solutions",
+    "question": "Which of the following will show the maximum elevation in boiling point for 1 molal solution?",
+    "options": {
+      "A": "NaCl",
+      "B": "K₂SO₄",
+      "C": "Urea",
+      "D": "Glucose"
+    },
+    "correct_option": "B",
+    "explanation": "K₂SO₄ dissociates into 3 ions (2K⁺ + SO₄²⁻), giving highest van’t Hoff factor (i), hence maximum boiling point elevation.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "electrochemistry",
+    "question": "Which of the following has the highest standard electrode potential?",
+    "options": {
+      "A": "Li⁺/Li",
+      "B": "Mg²⁺/Mg",
+      "C": "Cu²⁺/Cu",
+      "D": "Ag⁺/Ag"
+    },
+    "correct_option": "D",
+    "explanation": "Ag⁺/Ag has the highest positive E° value, indicating highest reduction tendency among the options.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "chemical-kinetics",
+    "question": "Half-life of a first-order reaction depends on:",
+    "options": {
+      "A": "Initial concentration",
+      "B": "Temperature only",
+      "C": "Both A and B",
+      "D": "Neither A nor B"
+    },
+    "correct_option": "B",
+    "explanation": "For first-order reactions, t½ = 0.693/k, depends only on rate constant k, which is temperature-dependent.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "surface-chemistry",
+    "question": "Which type of colloid is formed when a gas is dispersed in liquid?",
+    "options": {
+      "A": "Aerosol",
+      "B": "Foam",
+      "C": "Emulsion",
+      "D": "Sol"
+    },
+    "correct_option": "B",
+    "explanation": "Gas dispersed in liquid forms a foam, e.g., whipped cream.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "general-principles-and-processes-of-isolation-of-elements",
+    "question": "Which reducing agent is used in the extraction of iron from its oxide ore in the blast furnace?",
+    "options": {
+      "A": "Coke",
+      "B": "Carbon monoxide",
+      "C": "Hydrogen",
+      "D": "Limestone"
+    },
+    "correct_option": "B",
+    "explanation": "CO acts as the main reducing agent converting Fe₂O₃ to Fe in the blast furnace.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "the-p-block-element",
+    "question": "The most acidic oxide among the following is:",
+    "options": {
+      "A": "CO",
+      "B": "N₂O",
+      "C": "Cl₂O₇",
+      "D": "SO₂"
+    },
+    "correct_option": "C",
+    "explanation": "Cl₂O₇ is the anhydride of HClO₄ (strong acid), hence most acidic among the given oxides.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "organic-chemistry-some-basic-principles-and-techniques",
+    "question": "Which method is used to estimate nitrogen in an organic compound?",
+    "options": {
+      "A": "Dumas method",
+      "B": "Kjeldahl’s method",
+      "C": "Lassaigne’s test",
+      "D": "Victor Meyer’s method"
+    },
+    "correct_option": "B",
+    "explanation": "Kjeldahl’s method is used for estimating nitrogen content in organic compounds.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "hydrocarbons",
+    "question": "Which hydrocarbon gives yellow sooty flame on combustion?",
+    "options": {
+      "A": "Ethane",
+      "B": "Propane",
+      "C": "Benzene",
+      "D": "Butane"
+    },
+    "correct_option": "C",
+    "explanation": "Aromatic hydrocarbons like benzene have high carbon content and produce yellow sooty flame.",
+    "image": ""
+  },
+  {
+    "subject": "Chemistry",
+    "chapter": "environmental-chemistry",
+    "question": "Which of the following causes ozone depletion?",
+    "options": {
+      "A": "CO",
+      "B": "CFCs",
+      "C": "SO₂",
+      "D": "CO₂"
+    },
+    "correct_option": "B",
+    "explanation": "CFCs (Chlorofluorocarbons) release chlorine radicals that destroy ozone in the stratosphere.",
+    "image": ""
+  }
+]
