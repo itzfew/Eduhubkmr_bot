@@ -5,6 +5,16 @@ const debug = createDebug('bot:quizes');
 
 let accessToken: string | null = null;
 
+// Base URL for JSON files
+const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
+
+// Subject-specific JSON file paths
+const JSON_FILES: Record<string, string> = {
+  biology: `${BASE_URL}biology.json`,
+  chemistry: `${BASE_URL}chemistry.json`,
+  physics: `${BASE_URL}physics.json`,
+};
+
 const quizes = () => async (ctx: Context) => {
   debug('Triggered "quizes" handler');
 
@@ -39,11 +49,31 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Function to fetch all questions
-  const fetchQuestions = async () => {
+  // Function to fetch questions for a specific subject or all subjects
+  const fetchQuestions = async (subject?: string): Promise<any[]> => {
     try {
-      const response = await fetch('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/quiz.json');
-      return await response.json();
+      if (subject) {
+        // Fetch questions for a specific subject
+        const response = await fetch(JSON_FILES[subject]);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
+        }
+        return await response.json();
+      } else {
+        // Fetch questions from all subjects
+        const subjects = Object.keys(JSON_FILES);
+        const allQuestions: any[] = [];
+        for (const subj of subjects) {
+          const response = await fetch(JSON_FILES[subj]);
+          if (!response.ok) {
+            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+            continue;
+          }
+          const questions = await response.json();
+          allQuestions.push(...questions);
+        }
+        return allQuestions;
+      }
     } catch (err) {
       debug('Error fetching questions:', err);
       throw err;
@@ -59,12 +89,10 @@ const quizes = () => async (ctx: Context) => {
   // Function to create a Telegraph page with chapters list
   const createTelegraphPage = async (chapters: string[]) => {
     try {
-      // Ensure we have an access token
       if (!accessToken) {
         await createTelegraphAccount();
       }
 
-      // Generate current date and time for the title
       const now = new Date();
       const dateTimeString = now.toLocaleString('en-US', {
         year: 'numeric',
@@ -75,7 +103,6 @@ const quizes = () => async (ctx: Context) => {
         timeZoneName: 'short',
       });
 
-      // Create HTML content for the page
       let content = [
         { tag: 'h4', children: ['📚 Available Chapters'] },
         { tag: 'br' },
@@ -93,7 +120,6 @@ const quizes = () => async (ctx: Context) => {
         { tag: 'code', children: ['/chapter living world 2'] },
       ];
 
-      // Create the page using Telegra.ph API
       const res = await fetch('https://api.telegra.ph/createPage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,7 +151,6 @@ const quizes = () => async (ctx: Context) => {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
 
-      // Create a new Telegraph page
       const telegraphUrl = await createTelegraphPage(chapters);
 
       return {
@@ -152,7 +177,6 @@ const quizes = () => async (ctx: Context) => {
         (q: any) => q.chapter?.toLowerCase().trim() === chapterName.toLowerCase()
       );
 
-      // Check if chapter exists
       if (!filteredByChapter.length) {
         const { message } = await getChaptersMessage();
         await ctx.replyWithHTML(
@@ -161,7 +185,6 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // Select random questions
       const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
 
@@ -170,7 +193,6 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // Send questions as polls
       for (const question of selected) {
         const options = [question.options.A, question.options.B, question.options.C, question.options.D];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
@@ -193,7 +215,7 @@ const quizes = () => async (ctx: Context) => {
     return;
   }
 
-  // Existing /pyq, /b1, /c1, /p1 command handling
+  // Handle /pyq, /b1, /c1, /p1 commands
   if (cmdMatch) {
     const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
     const subjectCode = cmdMatch[2]; // b, c, p
@@ -217,10 +239,9 @@ const quizes = () => async (ctx: Context) => {
     }
 
     try {
-      const allQuestions = await fetchQuestions();
-      let filtered = isMixed
-        ? allQuestions
-        : allQuestions.filter((q: any) => q.subject?.toLowerCase() === subject);
+      const filtered = isMixed
+        ? await fetchQuestions()
+        : await fetchQuestions(subject!);
 
       if (!filtered.length) {
         await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
