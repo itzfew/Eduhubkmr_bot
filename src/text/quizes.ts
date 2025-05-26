@@ -1,8 +1,9 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
-import { TelegraPh } from 'telegraph-uploader'; // You'll need to install this package
 
 const debug = createDebug('bot:quizes');
+
+let accessToken: string | null = null;
 
 const quizes = () => async (ctx: Context) => {
   debug('Triggered "quizes" handler');
@@ -12,6 +13,31 @@ const quizes = () => async (ctx: Context) => {
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
   const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+
+  // Function to create a Telegraph account
+  const createTelegraphAccount = async () => {
+    try {
+      const res = await fetch('https://api.telegra.ph/createAccount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          short_name: 'EduHubBot',
+          author_name: 'EduHub Bot',
+          author_url: 'https://t.me/your_bot_username',
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        accessToken = data.result.access_token;
+        debug('Telegraph account created successfully');
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err) {
+      debug('Error creating Telegraph account:', err);
+      throw err;
+    }
+  };
 
   // Function to fetch all questions
   const fetchQuestions = async () => {
@@ -33,8 +59,11 @@ const quizes = () => async (ctx: Context) => {
   // Function to create a Telegraph page with chapters list
   const createTelegraphPage = async (chapters: string[]) => {
     try {
-      const telegraph = new TelegraPh();
-      
+      // Ensure we have an access token
+      if (!accessToken) {
+        await createTelegraphAccount();
+      }
+
       // Generate current date and time for the title
       const now = new Date();
       const dateTimeString = now.toLocaleString('en-US', {
@@ -43,34 +72,47 @@ const quizes = () => async (ctx: Context) => {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        timeZoneName: 'short'
+        timeZoneName: 'short',
       });
-      
+
       // Create HTML content for the page
-      let content = '<h4>📚 Available Chapters</h4><br/>';
-      content += `<p><i>Last updated: ${dateTimeString}</i></p><br/>`;
-      
-      // Add chapters list
-      content += '<ul>';
-      chapters.forEach(chapter => {
-        content += `<li>${chapter}</li>`;
+      let content = [
+        { tag: 'h4', children: ['📚 Available Chapters'] },
+        { tag: 'br' },
+        { tag: 'p', children: [{ tag: 'i', children: [`Last updated: ${dateTimeString}`] }] },
+        { tag: 'br' },
+        {
+          tag: 'ul',
+          children: chapters.map(chapter => ({ tag: 'li', children: [chapter] })),
+        },
+        { tag: 'br' },
+        { tag: 'p', children: ['To get questions from a chapter, use:'] },
+        { tag: 'code', children: ['/chapter [name] [count]'] },
+        { tag: 'br' },
+        { tag: 'p', children: ['Example:'] },
+        { tag: 'code', children: ['/chapter living world 2'] },
+      ];
+
+      // Create the page using Telegra.ph API
+      const res = await fetch('https://api.telegra.ph/createPage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: accessToken,
+          title: `EduHub Chapters - ${dateTimeString}`,
+          author_name: 'EduHub Bot',
+          author_url: 'https://t.me/your_bot_username',
+          content: content,
+          return_content: false,
+        }),
       });
-      content += '</ul><br/>';
-      
-      content += '<p>To get questions from a chapter, use:</p>';
-      content += '<code>/chapter [name] [count]</code><br/>';
-      content += '<p>Example:</p>';
-      content += '<code>/chapter living world 2</code>';
-      
-      // Create the page
-      const page = await telegraph.createPage({
-        title: `EduHub Chapters - ${dateTimeString}`,
-        author_name: 'EduHub Bot',
-        author_url: 'https://t.me/your_bot_username',
-        content: content
-      });
-      
-      return page.url;
+
+      const data = await res.json();
+      if (data.ok) {
+        return data.result.url;
+      } else {
+        throw new Error(data.error);
+      }
     } catch (err) {
       debug('Error creating Telegraph page:', err);
       throw err;
@@ -82,16 +124,16 @@ const quizes = () => async (ctx: Context) => {
     try {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
-      
+
       // Create a new Telegraph page
       const telegraphUrl = await createTelegraphPage(chapters);
-      
+
       return {
         message: `📚 <b>Available Chapters</b>\n\n` +
-                `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
-                `Then use: <code>/chapter [name] [count]</code>\n` +
-                `Example: <code>/chapter living world 2</code>`,
-        chapters
+                 `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
+                 `Then use: <code>/chapter [name] [count]</code>\n` +
+                 `Example: <code>/chapter living world 2</code>`,
+        chapters,
       };
     } catch (err) {
       debug('Error generating chapters message:', err);
