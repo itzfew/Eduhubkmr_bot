@@ -1,5 +1,6 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
+import { distance } from 'fastest-levenshtein';
 
 const debug = createDebug('bot:quizes');
 
@@ -13,6 +14,59 @@ const JSON_FILES: Record<string, string> = {
   biology: `${BASE_URL}biology.json`,
   chemistry: `${BASE_URL}chemistry.json`,
   physics: `${BASE_URL}physics.json`,
+};
+
+// Function to calculate similarity score between two strings
+const getSimilarityScore = (a: string, b: string): number => {
+  const maxLength = Math.max(a.length, b.length);
+  if (maxLength === 0) return 1.0;
+  return (maxLength - distance(a, b)) / maxLength;
+};
+
+// Function to find best matching chapter using fuzzy search
+const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
+  if (!query || !chapters.length) return null;
+  
+  // First try exact match (case insensitive)
+  const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
+  if (exactMatch) return exactMatch;
+
+  // Then try contains match
+  const containsMatch = chapters.find(ch => 
+    ch.toLowerCase().includes(query.toLowerCase()) || 
+    query.toLowerCase().includes(ch.toLowerCase())
+  );
+  if (containsMatch) return containsMatch;
+
+  // Then try fuzzy matching
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  
+  let bestMatch: string | null = null;
+  let bestScore = 0.5; // Minimum threshold
+
+  for (const chapter of chapters) {
+    const chapterWords = chapter.toLowerCase().split(/\s+/);
+    
+    // Calculate word overlap score
+    const matchingWords = queryWords.filter(qw => 
+      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
+    );
+    
+    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
+    
+    // Calculate full string similarity
+    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
+    
+    // Combined score (weighted towards overlap)
+    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
+    
+    if (totalScore > bestScore) {
+      bestScore = totalScore;
+      bestMatch = chapter;
+    }
+  }
+
+  return bestMatch;
 };
 
 const quizes = () => async (ctx: Context) => {
@@ -110,7 +164,10 @@ const quizes = () => async (ctx: Context) => {
         { tag: 'br' },
         {
           tag: 'ul',
-          children: chapters.map(chapter => ({ tag: 'li', children: [chapter] })),
+          children: chapters.map(chapter => ({
+            tag: 'li',
+            children: [chapter],
+          })),
         },
         { tag: 'br' },
         { tag: 'p', children: ['To get questions from a chapter, use:'] },
@@ -132,7 +189,6 @@ const quizes = () => async (ctx: Context) => {
           return_content: false,
         }),
       });
-
       const data = await res.json();
       if (data.ok) {
         return data.result.url;
@@ -152,12 +208,11 @@ const quizes = () => async (ctx: Context) => {
       const chapters = getUniqueChapters(allQuestions);
 
       const telegraphUrl = await createTelegraphPage(chapters);
-
       return {
         message: `📚 <b>Available Chapters</b>\n\n` +
-                 `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
-                 `Then use: <code>/chapter [name] [count]</code>\n` +
-                 `Example: <code>/chapter living world 2</code>`,
+          `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
+          `Then use: <code>/chapter [name] [count]</code>\n` +
+          `Example: <code>/chapter living world 2</code>`,
         chapters,
       };
     } catch (err) {
@@ -168,71 +223,76 @@ const quizes = () => async (ctx: Context) => {
 
   // Handle /chapter command
   if (chapterMatch) {
-    const chapterName = chapterMatch[1].trim();
+    const chapterQuery = chapterMatch[1].trim();
     const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
 
     try {
       const allQuestions = await fetchQuestions();
-      // Utility to calculate a basic word-match score
-const getSimilarityScore = (input: string, target: string): number => {
-  const inputWords = input.toLowerCase().split(/\s+/);
-  const targetWords = target.toLowerCase().split(/\s+/);
-  const common = inputWords.filter(word => targetWords.includes(word));
-  return common.length / Math.max(inputWords.length, targetWords.length);
-};
+      const chapters = getUniqueChapters(allQuestions);
+      
+      // Find the best matching chapter using fuzzy search
+      const matchedChapter = findBestMatchingChapter(chapters, chapterQuery);
+      
+      if (!matchedChapter) {
+        const { message } = await getChaptersMessage();
+        await ctx.replyWithHTML(
+          `❌ No matching chapter found for "<b>${chapterQuery}</b>"\n\n${message}`
+        );
+        return;
+      }
 
-// Get all unique chapters
-const chapters = getUniqueChapters(await fetchQuestions());
+      const filteredByChapter = allQuestions.filter(
+        (q: any) => q.chapter?.trim() === matchedChapter
+      );
 
-// Find best matched chapter
-const matchedChapter = chapters
-  .map(ch => ({ name: ch, score: getSimilarityScore(chapterName, ch) }))
-  .sort((a, b) => b.score - a.score)[0];
-
-// If the score is too low, consider it invalid
-if (!matchedChapter || matchedChapter.score < 0.3) {
-  const { message } = await getChaptersMessage();
-  await ctx.replyWithHTML(
-    `❌ Could not find a matching chapter for "<b>${chapterName}</b>"\n\n${message}`
-  );
-  return;
-}
-
-// Now fetch questions using the matched chapter
-const finalChapter = matchedChapter.name;
-const filteredByChapter = allQuestions.filter(
-  (q: any)
-    
       if (!filteredByChapter.length) {
         const { message } = await getChaptersMessage();
         await ctx.replyWithHTML(
-  `❌ No exact match found for "<b>${chapterName}</b>"\n\nClosest match: <b>${matchedChapter.name}</b>\n\n${message}`
-);
+          `❌ No questions found for chapter "<b>${matchedChapter}</b>"\n\n${message}`
+        );
         return;
+      }
+
+      // If the matched chapter isn't an exact match, confirm with user
+      if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
+        await ctx.replyWithHTML(
+          `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
+          `Sending questions from this chapter...\n` +
+          `(If this isn't correct, please try again with a more specific chapter name)`
+        );
       }
 
       const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
 
       if (!selected.length) {
-        await ctx.reply(`No questions available for chapter "${chapterName}".`);
+        await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
         return;
       }
 
       for (const question of selected) {
-        const options = [question.options.A, question.options.B, question.options.C, question.options.D];
+        const options = [
+          question.options.A,
+          question.options.B,
+          question.options.C,
+          question.options.D
+        ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-
+        
         if (question.image) {
           await ctx.replyWithPhoto({ url: question.image });
         }
-
-        await ctx.sendPoll(question.question, options, {
-          type: 'quiz',
-          correct_option_id: correctOptionIndex,
-          is_anonymous: false,
-          explanation: question.explanation || 'No explanation provided.',
-        } as any);
+        
+        await ctx.sendPoll(
+          question.question,
+          options,
+          {
+            type: 'quiz',
+            correct_option_id: correctOptionIndex,
+            is_anonymous: false,
+            explanation: question.explanation || 'No explanation provided.',
+          } as any
+        );
       }
     } catch (err) {
       debug('Error fetching questions:', err);
@@ -252,10 +312,10 @@ const filteredByChapter = allQuestions.filter(
       c: 'chemistry',
       p: 'physics',
     };
-
+    
     let subject: string | null = null;
     let isMixed = false;
-
+    
     if (cmd === 'pyq') {
       isMixed = true;
     } else if (subjectCode) {
@@ -265,10 +325,8 @@ const filteredByChapter = allQuestions.filter(
     }
 
     try {
-      const filtered = isMixed
-        ? await fetchQuestions()
-        : await fetchQuestions(subject!);
-
+      const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
+      
       if (!filtered.length) {
         await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
         return;
@@ -278,19 +336,28 @@ const filteredByChapter = allQuestions.filter(
       const selected = shuffled.slice(0, Math.min(count, filtered.length));
 
       for (const question of selected) {
-        const options = [question.options.A, question.options.B, question.options.C, question.options.D];
+        const options = [
+          question.options.A,
+          question.options.B,
+          question.options.C,
+          question.options.D
+        ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-
+        
         if (question.image) {
           await ctx.replyWithPhoto({ url: question.image });
         }
-
-        await ctx.sendPoll(question.question, options, {
-          type: 'quiz',
-          correct_option_id: correctOptionIndex,
-          is_anonymous: false,
-          explanation: question.explanation || 'No explanation provided.',
-        } as any);
+        
+        await ctx.sendPoll(
+          question.question,
+          options,
+          {
+            type: 'quiz',
+            correct_option_id: correctOptionIndex,
+            is_anonymous: false,
+            explanation: question.explanation || 'No explanation provided.',
+          } as any
+        );
       }
     } catch (err) {
       debug('Error fetching questions:', err);
