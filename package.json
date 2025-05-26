@@ -5,7 +5,6 @@
   "main": "src/index.ts",
   "author": "itzfew (https://t.me/itzfew)",
   "homepage": "https://github.com/itzfew/eduhub-bot",
-  "type": "module",
   "dependencies": {
     "@vercel/node": "^3.2.24",
     "axios": "^1.6.8",
