@@ -25,6 +25,207 @@ interface QuizSession {
   lastGifMessageId?: number; // Store the message ID of the last GIF sent
 }
 
+// Store active quiz sessions by chat ID
+const quizSessions: Map<number, QuizSession> = new Map();
+
+// Function to calculate similarity score between two strings
+const getSimilarityScore = (a: string, b: string): number => {
+  const maxLength = Math.max(a.length, b.length);
+  if (maxLength === 0) return 1.0;
+  return (maxLength - distance(a, b)) / maxLength;
+};
+
+// Function to find best matching chapter using fuzzy search
+const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
+  if (!query || !chapters.length) return null;
+  
+  // First try exact match (case insensitive)
+  const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
+  if (exactMatch) return exactMatch;
+
+  // Then try contains match
+  const containsMatch = chapters.find(ch => 
+    ch.toLowerCase().includes(query.toLowerCase()) || 
+    query.toLowerCase().includes(ch.toLowerCase())
+  );
+  if (containsMatch) return containsMatch;
+
+  // Then try fuzzy matching
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  
+  let bestMatch: string | null = null;
+  let bestScore = 0.5; // Minimum threshold
+
+  for (const chapter of chapters) {
+    const chapterWords = chapter.toLowerCase().split(/\s+/);
+    
+    // Calculate word overlap score
+    const matchingWords = queryWords.filter(qw => 
+      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
+    );
+    
+    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
+    
+    // Calculate full string similarity
+    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
+    
+    // Combined score (weighted towards overlap)
+    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
+    
+    if (totalScore > bestScore) {
+      bestScore = totalScore;
+      bestMatch = chapter;
+    }
+  }
+
+  return bestMatch;
+};
+
+// Function to create a Telegraph account
+const createTelegraphAccount = async () => {
+  try {
+    const res = await fetch('https://api.telegra.ph/createAccount', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        short_name: 'EduHubBot',
+        author_name: 'EduHub Bot',
+        author_url: 'https://t.me/your_bot_username',
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      accessToken = data.result.access_token;
+      debug('Telegraph account created successfully');
+    } else {
+      throw new Error(data.error);
+    }
+  } catch (err) {
+    debug('Error creating Telegraph account:', err);
+    throw err;
+  }
+};
+
+// Function to fetch questions for a specific subject or all subjects
+const fetchQuestions = async (subject?: string): Promise<any[]> => {
+  try {
+    if (subject) {
+      const response = await fetch(JSON_FILES[subject]);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
+      }
+      return await response.json();
+    } else {
+      const subjects = Object.keys(JSON_FILES);
+      const allQuestions: any[] = [];
+      for (const subj of subjects) {
+        const response = await fetch(JSON_FILES[subj]);
+        if (!response.ok) {
+          debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+          continue;
+        }
+        const questions = await response.json();
+        allQuestions.push(...questions);
+      }
+      return allQuestions;
+    }
+  } catch (err) {
+    debug('Error fetching questions:', err);
+    throw err;
+  }
+};
+
+// Function to get unique chapters
+const getUniqueChapters = (questions: any[]) => {
+  const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
+  return Array.from(chapters).filter(ch => ch).sort();
+};
+
+// Function to create a Telegraph page with chapters list
+const createTelegraphPage = async (chapters: string[]) => {
+  try {
+    if (!accessToken) {
+      await createTelegraphAccount();
+    }
+
+    const now = new Date();
+    const dateTimeString = now.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+
+    let content = [
+      { tag: 'h4', children: ['📚 Available Chapters'] },
+      { tag: 'br' },
+      { tag: 'p', children: [{ tag: 'i', children: [`Last updated: ${dateTimeString}`] }] },
+      { tag: 'br' },
+      {
+        tag: 'ul',
+        children: chapters.map(chapter => ({
+          tag: 'li',
+          children: [chapter],
+        })),
+      },
+      { tag: 'br' },
+      { tag: 'p', children: ['To get questions from a chapter, use:'] },
+      { tag: 'code', children: ['/chapter [name] [count]'] },
+      { tag: 'br' },
+      { tag: 'p', children: ['Example:'] },
+      { tag: 'code', children: ['/chapter living world 2'] },
+      { tag: 'br' },
+      { tag: 'p', children: ['To stop the quiz, use:'] },
+      { tag: 'code', children: ['/stop'] },
+    ];
+
+    const res = await fetch('https://api.telegra.ph/createPage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        access_token: accessToken,
+        title: `EduHub Chapters - ${dateTimeString}`,
+        author_name: 'EduHub Bot',
+        author_url: 'https://t.me/your_bot_username',
+        content: content,
+        return_content: false,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      return data.result.url;
+    } else {
+      throw new Error(data.error);
+    }
+  } catch (err) {
+    debug('Error creating Telegraph page:', err);
+    throw err;
+  }
+};
+
+// Function to generate chapters list message with Telegraph link
+const getChaptersMessage = async () => {
+  try {
+    const allQuestions = await fetchQuestions();
+    const chapters = getUniqueChapters(allQuestions);
+
+    const telegraphUrl = await createTelegraphPage(chapters);
+    return {
+      message: `📚 <b>Available Chapters</b>\n\n` +
+        `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
+        `Then use: <code>/chapter [name] [count]</code>\n` +
+        `Example: <code>/chapter living world 2</code>\n` +
+        `To stop the quiz: <code>/stop</code>`,
+      chapters,
+    };
+  } catch (err) {
+    debug('Error generating chapters message:', err);
+    throw err;
+  }
+};
+
 // Function to send a single question (updated)
 const sendQuestion = async (ctx: Context, question: any, session: QuizSession) => {
   const options = [
@@ -147,7 +348,7 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   ctx.reply('🚀 Quiz started! A new question will be sent every 30 seconds. Use /stop to end the quiz.');
 };
 
-// Function to stop a quiz session (updated to delete last GIF)
+// Function to stop a quiz session (updated)
 const stopQuizSession = (chatId: number) => {
   const session = quizSessions.get(chatId);
   if (session) {
