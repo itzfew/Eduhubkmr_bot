@@ -16,7 +16,7 @@ const JSON_FILES: Record<string, string> = {
   physics: `${BASE_URL}physics.json`,
 };
 
-// Interface for quiz session (updated to include lastGifMessageId)
+// Interface for quiz session
 interface QuizSession {
   intervalId: NodeJS.Timeout;
   questions: any[];
@@ -226,7 +226,7 @@ const getChaptersMessage = async () => {
   }
 };
 
-// Function to send a single question (updated)
+// Function to send a single question (updated to use GIF URL)
 const sendQuestion = async (ctx: Context, question: any, session: QuizSession) => {
   const options = [
     question.options.A,
@@ -237,37 +237,53 @@ const sendQuestion = async (ctx: Context, question: any, session: QuizSession) =
   const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
   if (question.image) {
-    await ctx.replyWithPhoto({ url: question.image });
+    try {
+      await ctx.replyWithPhoto({ url: question.image });
+      debug('Sent question image successfully');
+    } catch (err) {
+      debug('Error sending question image:', err.message, err.stack);
+    }
   }
 
   // Send the quiz question
-  await ctx.sendPoll(
-    question.question,
-    options,
-    {
-      type: 'quiz',
-      correct_option_id: correctOptionIndex,
-      is_anonymous: false,
-      explanation: question.explanation || 'No explanation provided.',
-    } as any
-  );
-
-  // Send the timer GIF from src/data/giphy.gif
   try {
-    const gifMessage = await ctx.replyWithAnimation({ source: 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/data/giphy.gif' });
+    await ctx.sendPoll(
+      question.question,
+      options,
+      {
+        type: 'quiz',
+        correct_option_id: correctOptionIndex,
+        is_anonymous: false,
+        explanation: question.explanation || 'No explanation provided.',
+      } as any
+    );
+    debug('Sent quiz question successfully');
+  } catch (err) {
+    debug('Error sending quiz question:', err.message, err.stack);
+    throw err; // Rethrow to stop the quiz if the question fails
+  }
+
+  // Send the timer GIF using the provided URL
+  try {
+    const gifMessage = await ctx.replyWithAnimation({
+      url: 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/data/giphy.gif',
+    });
     // Store the message ID of the GIF
     session.lastGifMessageId = gifMessage.message_id;
+    debug('Sent timer GIF successfully, message_id:', gifMessage.message_id);
   } catch (err) {
-    debug('Error sending GIF:', err);
-    // Don't stop the quiz if GIF fails to send; just log the error
+    debug('Error sending GIF:', err.message, err.stack);
+    // Inform user of GIF failure but continue quiz
+    await ctx.reply('⚠️ Failed to send timer GIF, continuing with quiz...');
   }
 };
 
-// Function to start a quiz session (updated)
+// Function to start a quiz session (updated with enhanced debugging)
 const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   const chatId = ctx.chat?.id;
   if (!chatId) {
     ctx.reply('Error: Unable to start quiz session.');
+    debug('No chatId found in ctx');
     return;
   }
 
@@ -280,6 +296,7 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
 
   if (!selected.length) {
     ctx.reply('No questions available.');
+    debug('No questions available after filtering');
     return;
   }
 
@@ -294,7 +311,7 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
 
   // Send first question immediately
   sendQuestion(ctx, session.questions[session.currentIndex], session).catch(err => {
-    debug('Error sending question:', err);
+    debug('Error sending first question:', err.message, err.stack);
     ctx.reply('Oops! Failed to send a question.');
     stopQuizSession(chatId);
   });
@@ -307,8 +324,9 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
       if (session.lastGifMessageId) {
         try {
           await ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
+          debug('Deleted final GIF, message_id:', session.lastGifMessageId);
         } catch (err) {
-          debug('Error deleting GIF:', err);
+          debug('Error deleting final GIF:', err.message, err.stack);
         }
       }
       await ctx.reply('✅ Quiz completed! No more questions available.\nUse /chapter or /pyq to start another quiz.');
@@ -320,8 +338,9 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
     if (session.lastGifMessageId) {
       try {
         await ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
+        debug('Deleted previous GIF, message_id:', session.lastGifMessageId);
       } catch (err) {
-        debug('Error deleting previous GIF:', err);
+        debug('Error deleting previous GIF:', err.message, err.stack);
       }
     }
 
@@ -329,13 +348,14 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
       await sendQuestion(ctx, session.questions[session.currentIndex], session);
       session.currentIndex++;
     } catch (err) {
-      debug('Error sending question:', err);
+      debug('Error sending question:', err.message, err.stack);
       // Delete the last GIF if it exists
       if (session.lastGifMessageId) {
         try {
           await ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
+          debug('Deleted GIF after question error, message_id:', session.lastGifMessageId);
         } catch (err) {
-          debug('Error deleting GIF:', err);
+          debug('Error deleting GIF after question error:', err.message, err.stack);
         }
       }
       await ctx.reply('Oops! Failed to send a question.');
@@ -346,9 +366,10 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   // Store session
   quizSessions.set(chatId, session);
   ctx.reply('🚀 Quiz started! A new question will be sent every 30 seconds. Use /stop to end the quiz.');
+  debug('Quiz session started for chatId:', chatId);
 };
 
-// Function to stop a quiz session (updated)
+// Function to stop a quiz session (updated with enhanced debugging)
 const stopQuizSession = (chatId: number) => {
   const session = quizSessions.get(chatId);
   if (session) {
@@ -357,12 +378,14 @@ const stopQuizSession = (chatId: number) => {
     if (session.lastGifMessageId) {
       try {
         session.ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
+        debug('Deleted GIF on quiz stop, message_id:', session.lastGifMessageId);
       } catch (err) {
-        debug('Error deleting GIF:', err);
+        debug('Error deleting GIF on quiz stop:', err.message, err.stack);
       }
     }
     quizSessions.delete(chatId);
     session.ctx.reply('🛑 Quiz stopped.');
+    debug('Quiz session stopped for chatId:', chatId);
   }
 };
 
@@ -433,7 +456,7 @@ const quizes = () => async (ctx: Context) => {
 
       startQuizSession(ctx, filteredByChapter, count);
     } catch (err) {
-      debug('Error fetching questions:', err);
+      debug('Error fetching questions:', err.message, err.stack);
       await ctx.reply('Oops! Failed to load questions.');
     }
     return;
@@ -472,7 +495,7 @@ const quizes = () => async (ctx: Context) => {
 
       startQuizSession(ctx, filtered, count);
     } catch (err) {
-      debug('Error fetching questions:', err);
+      debug('Error fetching questions:', err.message, err.stack);
       await ctx.reply('Oops! Failed to load questions.');
     }
   }
