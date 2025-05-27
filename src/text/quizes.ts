@@ -6,9 +6,6 @@ const debug = createDebug('bot:quizes');
 
 let accessToken: string | null = null;
 
-// Store sent question IDs per chat (in-memory, consider a database for persistence)
-const sentQuestions: Record<string, Set<string>> = {};
-
 // Base URL for JSON files
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
 
@@ -77,14 +74,6 @@ const quizes = () => async (ctx: Context) => {
 
   if (!ctx.message || !('text' in ctx.message)) return;
 
-  const chatId = ctx.chat?.id.toString();
-  if (!chatId) return;
-
-  // Initialize sentQuestions set for this chat if not exists
-  if (!sentQuestions[chatId]) {
-    sentQuestions[chatId] = new Set();
-  }
-
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
   const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
@@ -118,12 +107,14 @@ const quizes = () => async (ctx: Context) => {
   const fetchQuestions = async (subject?: string): Promise<any[]> => {
     try {
       if (subject) {
+        // Fetch questions for a specific subject
         const response = await fetch(JSON_FILES[subject]);
         if (!response.ok) {
           throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
         }
         return await response.json();
       } else {
+        // Fetch questions from all subjects
         const subjects = Object.keys(JSON_FILES);
         const allQuestions: any[] = [];
         for (const subj of subjects) {
@@ -133,7 +124,7 @@ const quizes = () => async (ctx: Context) => {
             continue;
           }
           const questions = await response.json();
-          allQuestions.push(...questions.map(q => ({ ...q, subject: subj })));
+          allQuestions.push(...questions);
         }
         return allQuestions;
       }
@@ -230,64 +221,6 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Function to select diverse questions
-  const selectDiverseQuestions = (questions: any[], count: number, chatId: string): any[] => {
-    const availableQuestions = questions.filter(
-      q => !sentQuestions[chatId].has(q.id || q.question)
-    );
-    
-    if (!availableQuestions.length) {
-      // Reset sent questions if all have been used
-      sentQuestions[chatId].clear();
-      debug(`Reset sent questions for chat ${chatId}`);
-    }
-
-    // Group questions by chapter or subject to ensure diversity
-    const groupedByChapter: Record<string, any[]> = {};
-    availableQuestions.forEach(q => {
-      const key = q.chapter || q.subject || 'unknown';
-      if (!groupedByChapter[key]) groupedByChapter[key] = [];
-      groupedByChapter[key].push(q);
-    });
-
-    const chapters = Object.keys(groupedByChapter);
-    const selected: any[] = [];
-    
-    // Try to select questions from different chapters/subjects
-    while (selected.length < count && chapters.length > 0) {
-      for (const chapter of chapters) {
-        if (selected.length >= count) break;
-        const chapterQuestions = groupedByChapter[chapter].filter(
-          q => !sentQuestions[chatId].has(q.id || q.question)
-        );
-        if (chapterQuestions.length > 0) {
-          const randomIndex = Math.floor(Math.random() * chapterQuestions.length);
-          const selectedQuestion = chapterQuestions[randomIndex];
-          selected.push(selectedQuestion);
-          sentQuestions[chatId].add(selectedQuestion.id || selectedQuestion.question);
-          // Remove the question from available pool
-          groupedByChapter[chapter].splice(randomIndex, 1);
-        }
-      }
-      // Remove empty chapters
-      Object.keys(groupedByChapter).forEach(ch => {
-        if (groupedByChapter[ch].length === 0) delete groupedByChapter[ch];
-      });
-      chapters.splice(0, chapters.length, ...Object.keys(groupedByChapter));
-    }
-
-    // If not enough questions, fill with random ones (allowing repeats if necessary)
-    if (selected.length < count) {
-      const remaining = questions
-        .filter(q => !sentQuestions[chatId].has(q.id || q.question))
-        .sort(() => 0.5 - Math.random());
-      selected.push(...remaining.slice(0, count - selected.length));
-      selected.forEach(q => sentQuestions[chatId].add(q.id || q.question));
-    }
-
-    return selected;
-  };
-
   // Handle /chapter command
   if (chapterMatch) {
     const chapterQuery = chapterMatch[1].trim();
@@ -329,10 +262,11 @@ const quizes = () => async (ctx: Context) => {
         );
       }
 
-      const selected = selectDiverseQuestions(filteredByChapter, count, chatId);
+      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
 
       if (!selected.length) {
-        await ctx.reply(`No new questions available for chapter "${matchedChapter}". Try again later or choose a different chapter.`);
+        await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
         return;
       }
 
@@ -398,12 +332,8 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      const selected = selectDiverseQuestions(filtered, count, chatId);
-
-      if (!selected.length) {
-        await ctx.reply(`No new questions available for ${subject || 'the selected subjects'}. Try again later or choose a specific chapter.`);
-        return;
-      }
+      const shuffled = filtered.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filtered.length));
 
       for (const question of selected) {
         const options = [
