@@ -254,7 +254,7 @@ const sendQuestion = async (ctx: Context, question: any, session: QuizSession) =
 
   // Send the timer GIF from src/data/giphy.gif
   try {
-    const gifMessage = await ctx.replyWithAnimation({ source: 'src/data/giphy.gif' });
+    const gifMessage = await ctx.replyWithAnimation({ source: 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/data/giphy.gif' });
     // Store the message ID of the GIF
     session.lastGifMessageId = gifMessage.message_id;
   } catch (err) {
