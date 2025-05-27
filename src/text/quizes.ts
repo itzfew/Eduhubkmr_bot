@@ -18,7 +18,9 @@ const JSON_FILES: Record<string, string> = {
 
 // Interface for quiz session
 interface QuizSession {
-  intervalId: NodeJS.Timeout;
+  questionIntervalId: NodeJS.Timeout;
+  timerIntervalId: NodeJS.Timeout | null;
+  timerMessageId: number | null;
   questions: any[];
   currentIndex: number;
   ctx: Context;
@@ -38,37 +40,28 @@ const getSimilarityScore = (a: string, b: string): number => {
 const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
   if (!query || !chapters.length) return null;
   
-  // First try exact match (case insensitive)
   const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
   if (exactMatch) return exactMatch;
 
-  // Then try contains match
   const containsMatch = chapters.find(ch => 
     ch.toLowerCase().includes(query.toLowerCase()) || 
     query.toLowerCase().includes(ch.toLowerCase())
   );
   if (containsMatch) return containsMatch;
 
-  // Then try fuzzy matching
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   
   let bestMatch: string | null = null;
-  let bestScore = 0.5; // Minimum threshold
+  let bestScore = 0.5;
 
   for (const chapter of chapters) {
     const chapterWords = chapter.toLowerCase().split(/\s+/);
-    
-    // Calculate word overlap score
     const matchingWords = queryWords.filter(qw => 
       chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
     );
     
     const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
-    
-    // Calculate full string similarity
     const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
-    
-    // Combined score (weighted towards overlap)
     const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
     
     if (totalScore > bestScore) {
@@ -251,11 +244,88 @@ const sendQuestion = async (ctx: Context, question: any) => {
   );
 };
 
+// Function to start or update the countdown timer
+const startTimer = async (session: QuizSession) => {
+  const ctx = session.ctx;
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  let secondsLeft = 30;
+
+  // If a timer message exists, delete it
+  if (session.timerMessageId) {
+    try {
+      await ctx.telegram.deleteMessage(chatId, session.timerMessageId);
+    } catch (err) {
+      debug('Error deleting previous timer message:', err);
+    }
+  }
+
+  // Clear any existing timer interval
+  if (session.timerIntervalId) {
+    clearInterval(session.timerIntervalId);
+  }
+
+  // Send initial timer message
+  const timerMessage = await ctx.reply(`⏳ Next question in ${secondsLeft}s`);
+  session.timerMessageId = timerMessage.message_id;
+
+  // Start countdown
+  session.timerIntervalId = setInterval(async () => {
+    secondsLeft--;
+    if (secondsLeft <= 0) {
+      // Stop timer without clearing session.timerIntervalId here (handled elsewhere)
+      try {
+        await ctx.telegram.editMessageText(
+          chatId,
+          session.timerMessageId!,
+          undefined,
+          '⏳ Sending next question...'
+        );
+      } catch (err) {
+        debug('Error updating timer message:', err);
+      }
+      return;
+    }
+
+    try {
+      await ctx.telegram.editMessageText(
+        chatId,
+        session.timerMessageId!,
+        undefined,
+        `⏳ Next question in ${secondsLeft}s`
+      );
+    } catch (err) {
+      debug('Error updating timer message:', err);
+      // Stop timer if editing fails (e.g., message deleted)
+      clearInterval(session.timerIntervalId!);
+      session.timerIntervalId = null;
+      session.timerMessageId = null;
+    }
+  }, 1000); // Update every second
+};
+
+// Function to stop the timer
+const stopTimer = async (session: QuizSession) => {
+  if (session.timerIntervalId) {
+    clearInterval(session.timerIntervalId);
+    session.timerIntervalId = null;
+  }
+  if (session.timerMessageId && session.ctx.chat?.id) {
+    try {
+      await session.ctx.telegram.deleteMessage(session.ctx.chat.id, session.timerMessageId);
+    } catch (err) {
+      debug('Error deleting timer message:', err);
+    }
+    session.timerMessageId = null;
+  }
+};
+
 // Function to start a quiz session
-const startQuizSession = (ctx: Context, questions: any[], count: number) => {
+const startQuizSession = async (ctx: Context, questions: any[], count: number) => {
   const chatId = ctx.chat?.id;
   if (!chatId) {
-    ctx.reply('Error: Unable to start quiz session.');
+    await ctx.reply('Error: Unable to start quiz session.');
     return;
   }
 
@@ -267,29 +337,40 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   const selected = shuffled.slice(0, Math.min(count, questions.length));
 
   if (!selected.length) {
-    ctx.reply('No questions available.');
+    await ctx.reply('No questions available.');
     return;
   }
 
   // Initialize session
   const session: QuizSession = {
-    intervalId: null as any, // Will be set below
+    questionIntervalId: null as any,
+    timerIntervalId: null,
+    timerMessageId: null,
     questions: selected,
     currentIndex: 0,
     ctx,
   };
 
   // Send first question immediately
-  sendQuestion(ctx, session.questions[session.currentIndex]).catch(err => {
+  try {
+    await sendQuestion(ctx, session.questions[session.currentIndex]);
+    session.currentIndex++;
+  } catch (err) {
     debug('Error sending question:', err);
-    ctx.reply('Oops! Failed to send a question.');
+    await ctx.reply('Oops! Failed to send a question.');
     stopQuizSession(chatId);
-  });
-  session.currentIndex++;
+    return;
+  }
+
+  // Start timer for next question
+  if (session.currentIndex < session.questions.length) {
+    await startTimer(session);
+  }
 
   // Start interval for remaining questions
-  session.intervalId = setInterval(async () => {
+  session.questionIntervalId = setInterval(async () => {
     if (session.currentIndex >= session.questions.length) {
+      await stopTimer(session);
       await ctx.reply('✅ Quiz completed! No more questions available.\nUse /chapter or /pyq to start another quiz.');
       stopQuizSession(chatId);
       return;
@@ -298,8 +379,14 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
     try {
       await sendQuestion(ctx, session.questions[session.currentIndex]);
       session.currentIndex++;
+      if (session.currentIndex < session.questions.length) {
+        await startTimer(session);
+      } else {
+        await stopTimer(session);
+      }
     } catch (err) {
       debug('Error sending question:', err);
+      await stopTimer(session);
       await ctx.reply('Oops! Failed to send a question.');
       stopQuizSession(chatId);
     }
@@ -307,16 +394,17 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
 
   // Store session
   quizSessions.set(chatId, session);
-  ctx.reply('🚀 Quiz started! A new question will be sent every 30 seconds. Use /stop to end the quiz.');
+  await ctx.reply('🚀 Quiz started! A new question will be sent every 30 seconds. Use /stop to end the quiz.');
 };
 
 // Function to stop a quiz session
-const stopQuizSession = (chatId: number) => {
+const stopQuizSession = async (chatId: number) => {
   const session = quizSessions.get(chatId);
   if (session) {
-    clearInterval(session.intervalId);
+    clearInterval(session.questionIntervalId);
+    await stopTimer(session);
     quizSessions.delete(chatId);
-    session.ctx.reply('🛑 Quiz stopped.');
+    await session.ctx.reply('🛑 Quiz stopped.');
   }
 };
 
@@ -337,7 +425,7 @@ const quizes = () => async (ctx: Context) => {
   // Handle /stop command
   if (stopMatch) {
     if (quizSessions.has(chatId)) {
-      stopQuizSession(chatId);
+      await stopQuizSession(chatId);
     } else {
       await ctx.reply('No active quiz session to stop.');
     }
@@ -347,13 +435,12 @@ const quizes = () => async (ctx: Context) => {
   // Handle /chapter command
   if (chapterMatch) {
     const chapterQuery = chapterMatch[1].trim();
-    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 10; // Default to 10 questions
+    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 10;
 
     try {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
       
-      // Find the best matching chapter using fuzzy search
       const matchedChapter = findBestMatchingChapter(chapters, chapterQuery);
       
       if (!matchedChapter) {
@@ -376,7 +463,6 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // If the matched chapter isn't an exact match, confirm with user
       if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
         await ctx.replyWithHTML(
           `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
@@ -395,9 +481,9 @@ const quizes = () => async (ctx: Context) => {
 
   // Handle /pyq, /b1, /c1, /p1 commands
   if (cmdMatch) {
-    const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-    const subjectCode = cmdMatch[2]; // b, c, p
-    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 10; // Default to 10 questions
+    const cmd = cmdMatch[1];
+    const subjectCode = cmdMatch[2];
+    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 10;
 
     const subjectMap: Record<string, string> = {
       b: 'biology',
@@ -432,11 +518,11 @@ const quizes = () => async (ctx: Context) => {
   }
 };
 
-// Export stop handler for external use (e.g., in main bot file)
+// Export stop handler for external use
 export const stopQuiz = () => async (ctx: Context) => {
   const chatId = ctx.chat?.id;
   if (chatId && quizSessions.has(chatId)) {
-    stopQuizSession(chatId);
+    await stopQuizSession(chatId);
   } else {
     await ctx.reply('No active quiz session to stop.');
   }
