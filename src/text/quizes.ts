@@ -16,13 +16,14 @@ const JSON_FILES: Record<string, string> = {
   physics: `${BASE_URL}physics.json`,
 };
 
-// Interface for quiz session
+// Interface for quiz session (updated to include timerMessageId and timerIntervalId)
 interface QuizSession {
-  intervalId: NodeJS.Timeout;
+  intervalId: NodeJS.Timeout; // For question sending
   questions: any[];
   currentIndex: number;
   ctx: Context;
-  lastGifMessageId?: number; // Store the message ID of the last GIF sent
+  timerMessageId?: number; // Store the message ID of the timer message
+  timerIntervalId?: NodeJS.Timeout; // Store the interval ID for the timer updates
 }
 
 // Store active quiz sessions by chat ID
@@ -226,7 +227,7 @@ const getChaptersMessage = async () => {
   }
 };
 
-// Function to send a single question (updated to use GIF URL)
+// Function to send a single question (updated to include timer)
 const sendQuestion = async (ctx: Context, question: any, session: QuizSession) => {
   const options = [
     question.options.A,
@@ -263,22 +264,47 @@ const sendQuestion = async (ctx: Context, question: any, session: QuizSession) =
     throw err; // Rethrow to stop the quiz if the question fails
   }
 
-  // Send the timer GIF using the provided URL
+  // Start the countdown timer
   try {
-    const gifMessage = await ctx.replyWithAnimation({
-      url: 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/data/giphy.gif',
-    });
-    // Store the message ID of the GIF
-    session.lastGifMessageId = gifMessage.message_id;
-    debug('Sent timer GIF successfully, message_id:', gifMessage.message_id);
+    const chatId = ctx.chat?.id;
+    if (!chatId) throw new Error('No chatId found');
+
+    let timeLeft = 30; // Match the 30-second question interval
+    const timerMessage = await ctx.reply(`⏳ Time left: ${timeLeft}s`);
+    session.timerMessageId = timerMessage.message_id;
+    debug('Sent initial timer message, message_id:', timerMessage.message_id);
+
+    // Start updating the timer every second
+    session.timerIntervalId = setInterval(async () => {
+      timeLeft--;
+      if (timeLeft < 0) {
+        clearInterval(session.timerIntervalId!);
+        session.timerIntervalId = undefined;
+        debug('Timer stopped for message_id:', session.timerMessageId);
+        return;
+      }
+
+      try {
+        await ctx.telegram.editMessageText(
+          chatId,
+          session.timerMessageId!,
+          undefined,
+          `⏳ Time left: ${timeLeft}s`
+        );
+        debug(`Updated timer to ${timeLeft}s, message_id:`, session.timerMessageId);
+      } catch (err) {
+        debug('Error updating timer message:', err.message, err.stack);
+        clearInterval(session.timerIntervalId!);
+        session.timerIntervalId = undefined;
+      }
+    }, 1000); // Update every second
   } catch (err) {
-    debug('Error sending GIF:', err.message, err.stack);
-    // Inform user of GIF failure but continue quiz
-    await ctx.reply('⚠️ Failed to send timer GIF, continuing with quiz...');
+    debug('Error starting timer:', err.message, err.stack);
+    await ctx.reply('⚠️ Failed to start timer, continuing with quiz...');
   }
 };
 
-// Function to start a quiz session (updated with enhanced debugging)
+// Function to start a quiz session (updated to handle timer)
 const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   const chatId = ctx.chat?.id;
   if (!chatId) {
@@ -306,7 +332,8 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
     questions: selected,
     currentIndex: 0,
     ctx,
-    lastGifMessageId: undefined, // Initialize as undefined
+    timerMessageId: undefined, // Initialize as undefined
+    timerIntervalId: undefined, // Initialize as undefined
   };
 
   // Send first question immediately
@@ -320,13 +347,18 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   // Start interval for remaining questions
   session.intervalId = setInterval(async () => {
     if (session.currentIndex >= session.questions.length) {
-      // Delete the last GIF before ending the quiz
-      if (session.lastGifMessageId) {
+      // Stop and delete the last timer
+      if (session.timerIntervalId) {
+        clearInterval(session.timerIntervalId);
+        session.timerIntervalId = undefined;
+        debug('Stopped final timer interval');
+      }
+      if (session.timerMessageId) {
         try {
-          await ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
-          debug('Deleted final GIF, message_id:', session.lastGifMessageId);
+          await ctx.telegram.deleteMessage(chatId, session.timerMessageId);
+          debug('Deleted final timer message, message_id:', session.timerMessageId);
         } catch (err) {
-          debug('Error deleting final GIF:', err.message, err.stack);
+          debug('Error deleting final timer message:', err.message, err.stack);
         }
       }
       await ctx.reply('✅ Quiz completed! No more questions available.\nUse /chapter or /pyq to start another quiz.');
@@ -334,13 +366,18 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
       return;
     }
 
-    // Delete the previous GIF if it exists
-    if (session.lastGifMessageId) {
+    // Stop and delete the previous timer
+    if (session.timerIntervalId) {
+      clearInterval(session.timerIntervalId);
+      session.timerIntervalId = undefined;
+      debug('Stopped previous timer interval');
+    }
+    if (session.timerMessageId) {
       try {
-        await ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
-        debug('Deleted previous GIF, message_id:', session.lastGifMessageId);
+        await ctx.telegram.deleteMessage(chatId, session.timerMessageId);
+        debug('Deleted previous timer message, message_id:', session.timerMessageId);
       } catch (err) {
-        debug('Error deleting previous GIF:', err.message, err.stack);
+        debug('Error deleting previous timer message:', err.message, err.stack);
       }
     }
 
@@ -349,13 +386,18 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
       session.currentIndex++;
     } catch (err) {
       debug('Error sending question:', err.message, err.stack);
-      // Delete the last GIF if it exists
-      if (session.lastGifMessageId) {
+      // Stop and delete the timer if it exists
+      if (session.timerIntervalId) {
+        clearInterval(session.timerIntervalId);
+        session.timerIntervalId = undefined;
+        debug('Stopped timer interval after question error');
+      }
+      if (session.timerMessageId) {
         try {
-          await ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
-          debug('Deleted GIF after question error, message_id:', session.lastGifMessageId);
+          await ctx.telegram.deleteMessage(chatId, session.timerMessageId);
+          debug('Deleted timer message after question error, message_id:', session.timerMessageId);
         } catch (err) {
-          debug('Error deleting GIF after question error:', err.message, err.stack);
+          debug('Error deleting timer message after question error:', err.message, err.stack);
         }
       }
       await ctx.reply('Oops! Failed to send a question.');
@@ -369,18 +411,23 @@ const startQuizSession = (ctx: Context, questions: any[], count: number) => {
   debug('Quiz session started for chatId:', chatId);
 };
 
-// Function to stop a quiz session (updated with enhanced debugging)
+// Function to stop a quiz session (updated to handle timer)
 const stopQuizSession = (chatId: number) => {
   const session = quizSessions.get(chatId);
   if (session) {
     clearInterval(session.intervalId);
-    // Delete the last GIF if it exists
-    if (session.lastGifMessageId) {
+    // Stop and delete the timer
+    if (session.timerIntervalId) {
+      clearInterval(session.timerIntervalId);
+      session.timerIntervalId = undefined;
+      debug('Stopped timer interval on quiz stop');
+    }
+    if (session.timerMessageId) {
       try {
-        session.ctx.telegram.deleteMessage(chatId, session.lastGifMessageId);
-        debug('Deleted GIF on quiz stop, message_id:', session.lastGifMessageId);
+        session.ctx.telegram.deleteMessage(chatId, session.timerMessageId);
+        debug('Deleted timer message on quiz stop, message_id:', session.timerMessageId);
       } catch (err) {
-        debug('Error deleting GIF on quiz stop:', err.message, err.stack);
+        debug('Error deleting timer message on quiz stop:', err.message, err.stack);
       }
     }
     quizSessions.delete(chatId);
