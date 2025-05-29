@@ -87,7 +87,7 @@ const quizes = () => async (ctx: Context) => {
         body: JSON.stringify({
           short_name: 'EduHubBot',
           author_name: 'EduHub Bot',
-          author_url: 'https://t.me/your_bot_username',
+          author_url: 'https://t.me/neetpw01',
         }),
       });
       const data = await res.json();
