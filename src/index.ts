@@ -8,7 +8,7 @@ import { study } from './commands/study';
 import { neet } from './commands/neet';
 import { jee } from './commands/jee';
 import { groups } from './commands/groups';
-import { quizes } from './text';
+import { quizes, initializeAutoQuizzes } from './text';
 import { greeting } from './text';
 import { development, production } from './core';
 import { isPrivateChat } from './utils/groupSettings';
@@ -498,6 +498,16 @@ bot.on('message', async (ctx) => {
     await greeting()(ctx);
   }
 });
+
+// Initialize auto quizzes on bot startup
+bot.launch().then(() => {
+  initializeAutoQuizzes(bot);
+  console.log('Bot started and auto quizzes initialized');
+});
+
+// Enable graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 // --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
