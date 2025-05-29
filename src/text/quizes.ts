@@ -1,7 +1,7 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
-import { db, ref, set, push } from './utils/firebase';
+import { db, ref, set, push } from '../utils/firebase';
 import { get, onValue, remove } from 'firebase/database';
 
 const debug = createDebug('bot:quizes');
