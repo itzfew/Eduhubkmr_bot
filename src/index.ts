@@ -9,7 +9,7 @@ import { neet } from './commands/neet';
 import { jee } from './commands/jee';
 import { groups } from './commands/groups';
 import { me } from './commands/me';
-import { quote } from './commands/quote';
+import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './commands/playquiz';
 import { quizes, greeting } from './commands/text';
 import { setQuizTime, removeQuizTime, initializeQuizSchedules } from './commands/quiztime';
