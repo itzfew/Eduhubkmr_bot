@@ -1,37 +1,109 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import createDebug from 'debug';
-import { development, production } from './core';
-import { about } from './commands/about';
-import { help } from './commands/help';
+import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
+import { db, ref, push, set } from './utils/firebase';
+import { saveToSheet } from './utils/saveToSheet';
+import { about, help } from './commands';
 import { study } from './commands/study';
 import { neet } from './commands/neet';
 import { jee } from './commands/jee';
 import { groups } from './commands/groups';
+import { quizes } from './text';
+import { greeting } from './text';
+import { development, production } from './core';
+import { isPrivateChat } from './utils/groupSettings';
 import { me } from './commands/me';
 import { quote } from './commands/quotes';
-import { playquiz, handleQuizActions } from './commands/playquiz';
-import { quizes, greeting } from './commands/text';
-import { setQuizTime, removeQuizTime, initializeQuizSchedules } from './commands/quiztime';
-import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { saveToSheet } from './utils/saveToSheet';
-import { isPrivateChat } from './utils/groupSettings';
-import { db, ref, push, set } from './utils/firebase';
-
-const debug = createDebug('bot:main');
+import { playquiz, handleQuizActions } from './playquiz';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
+let accessToken: string | null = null;
 
-if (!BOT_TOKEN) {
-  throw new Error('BOT_TOKEN not provided!');
-}
-
+if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
 
-// Initialize quiz schedules from Firebase
-initializeQuizSchedules(bot);
+// Store pending question submissions
+interface PendingQuestion {
+  subject: string;
+  chapter: string;
+  count: number;
+  questions: Array<{
+    question: string;
+    options: { [key: string]: string };
+    correct_option: string;
+    explanation: string;
+    image?: string;
+  }>;
+  expectingImageFor?: string; // Track poll ID awaiting an image
+  awaitingChapterSelection?: boolean; // Track if waiting for chapter number
+}
+
+const pendingSubmissions: { [key: number]: PendingQuestion } = {};
+
+// --- TELEGRAPH INTEGRATION ---
+async function createTelegraphAccount() {
+  try {
+    const res = await fetch('https://api.telegra.ph/createAccount', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ short_name: 'EduhubBot', author_name: 'Eduhub KMR Bot' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      accessToken = data.result.access_token;
+      console.log('Telegraph account created, access token:', accessToken);
+    } else {
+      throw new Error(data.error);
+    }
+  } catch (error) {
+    console.error('Failed to create Telegraph account:', error);
+  }
+}
+
+async function createTelegraphPage(title: string, content: string) {
+  if (!accessToken) {
+    await createTelegraphAccount();
+  }
+  try {
+    const res = await fetch('https://api.telegra.ph/createPage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        access_token: accessToken,
+        title,
+        content: [{ tag: 'p', children: [content] }],
+        return_content: true,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      return data.result.url;
+    } else {
+      throw new Error(data.error);
+    }
+  } catch (error) {
+    console.error('Failed to create Telegraph page:', error);
+    return null;
+  }
+}
+
+// --- FETCH CHAPTERS ---
+async function fetchChapters(subject: string): Promise<string[]> {
+  const subjectFile = subject.toLowerCase();
+  const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
+    const data = await res.json();
+    const chapters = [...new Set(data.map((item: any) => item.chapter))]; // Unique chapters
+    return chapters.sort();
+  } catch (error) {
+    console.error(`Error fetching chapters for ${subject}:`, error);
+    return [];
+  }
+}
 
 // --- COMMANDS ---
 bot.command('about', about());
@@ -43,8 +115,6 @@ bot.command('groups', groups());
 bot.command(['me', 'user', 'info'], me());
 bot.command('quote', quote());
 bot.command('quiz', playquiz());
-bot.command('setquiztime', setQuizTime());
-bot.command('removequiztime', removeQuizTime());
 
 // New command to show user count from Google Sheets
 bot.command('users', async (ctx) => {
@@ -96,7 +166,7 @@ bot.action('refresh_users', async (ctx) => {
 bot.command('broadcast', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
 
-  const msg = ctx.message?.text?.split(' ').slice(1).join(' ');
+  const msg = ctx.message.text?.split(' ').slice(1).join(' ');
   if (!msg) return ctx.reply('Usage:\n/broadcast Your message here');
 
   let chatIds: number[] = [];
@@ -129,7 +199,7 @@ bot.command('broadcast', async (ctx) => {
 bot.command('reply', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
 
-  const parts = ctx.message?.text?.split(' ');
+  const parts = ctx.message.text?.split(' ');
   if (!parts || parts.length < 3) {
     return ctx.reply('Usage:\n/reply <chat_id> <message>');
   }
@@ -157,9 +227,9 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     return ctx.reply('You are not authorized to use this command.');
   }
 
-  const command = ctx.message?.text?.split(' ')[0].substring(1); // Remove leading '/'
-  const countStr = ctx.message?.text?.split(' ')[1];
-  const count = parseInt(countStr || '', 10);
+  const command = ctx.message.text?.split(' ')[0].substring(1); // Remove leading '/'
+  const countStr = ctx.message.text?.split(' ')[1];
+  const count = parseInt(countStr, 10);
 
   if (!countStr || isNaN(count) || count <= 0) {
     return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
