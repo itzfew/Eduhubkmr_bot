@@ -1,5 +1,5 @@
 // src/text/quizes.ts
-import { Context } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
 import { db, ref, set, push, onValue, remove } from '../utils/firebase';
@@ -21,9 +21,23 @@ const JSON_FILES: Record<string, string> = {
 // Map to store interval IDs for each chat
 const quizIntervals: Record<string, NodeJS.Timeout> = {};
 
+// Map to store the last question sent per chat
+const lastQuestions: Record<string, string | null> = {};
+
 // Interface for group settings
 interface GroupSettings {
   quizInterval?: number; // Interval in minutes
+}
+
+// Interface for a question
+interface Question {
+  id?: string; // Optional ID field for tracking
+  question: string;
+  options: { A: string; B: string; C: string; D: string };
+  correct_option: string;
+  explanation?: string;
+  image?: string;
+  chapter?: string;
 }
 
 // Function to calculate similarity score between two strings
@@ -93,57 +107,175 @@ const removeGroupSettings = async (chatId: string) => {
   }
 };
 
+// Function to fetch questions with retry logic
+const fetchQuestions = async (subject?: string, retries = 3): Promise<Question[]> => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (subject) {
+        const response = await fetch(JSON_FILES[subject]);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
+        }
+        const questions = await response.json();
+        if (!Array.isArray(questions) || questions.length === 0) {
+          throw new Error(`No valid questions found for ${subject}`);
+        }
+        return questions;
+      } else {
+        const subjects = Object.keys(JSON_FILES);
+        const allQuestions: Question[] = [];
+        for (const subj of subjects) {
+          const response = await fetch(JSON_FILES[subj]);
+          if (!response.ok) {
+            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+            continue;
+          }
+          const questions = await response.json();
+          if (Array.isArray(questions)) {
+            allQuestions.push(...questions);
+          }
+        }
+        if (allQuestions.length === 0) {
+          throw new Error('No valid questions found across all subjects');
+        }
+        return allQuestions;
+      }
+    } catch (err) {
+      debug(`Attempt ${attempt} failed to fetch questions:`, err);
+      if (attempt === retries) {
+        throw err;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  return [];
+};
+
+// Function to validate a question
+const isValidQuestion = (question: Question): boolean => {
+  return (
+    !!question.question &&
+    !!question.options &&
+    typeof question.options === 'object' &&
+    ['A', 'B', 'C', 'D'].every(key => typeof question.options[key] === 'string' && question.options[key]) &&
+    ['A', 'B', 'C', 'D'].includes(question.correct_option)
+  );
+};
+
 // Function to send a random question
 const sendRandomQuestion = async (ctx: Context, subject?: string) => {
+  const chatId = ctx.chat?.id.toString();
+  if (!chatId) {
+    debug('Error: Unable to identify chat in sendRandomQuestion');
+    return;
+  }
+
   try {
     const questions = await fetchQuestions(subject);
     if (!questions.length) {
+      debug(`No questions available for ${subject || 'the selected subjects'} in chat ${chatId}`);
       await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
       return;
     }
 
-    const question = questions[Math.floor(Math.random() * questions.length)];
+    // Filter out invalid questions
+    const validQuestions = questions.filter(isValidQuestion);
+    if (!validQuestions.length) {
+      debug(`No valid questions available for ${subject || 'the selected subjects'} in chat ${chatId}`);
+      await ctx.reply(`No valid questions available for ${subject || 'the selected subjects'}.`);
+      return;
+    }
+
+    // Exclude the last question sent in this chat
+    const lastQuestion = lastQuestions[chatId];
+    const availableQuestions = lastQuestion
+      ? validQuestions.filter(q => q.id !== lastQuestion && q.question !== lastQuestion)
+      : validQuestions;
+
+    if (!availableQuestions.length) {
+      debug(`No new questions available for ${subject || 'the selected subjects'} in chat ${chatId}`);
+      await ctx.reply(`No new questions available for ${subject || 'the selected subjects'}.`);
+      return;
+    }
+
+    // Select a random question
+    const question = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+
+    // Store the question ID or question text as the last sent
+    lastQuestions[chatId] = question.id || question.question;
+
     const options = [
       question.options.A,
       question.options.B,
       question.options.C,
-      question.options.D
+      question.options.D,
     ];
     const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-    if (question.image) {
-      await ctx.replyWithPhoto({ url: question.image });
-    }
+    try {
+      if (question.image) {
+        await ctx.replyWithPhoto({ url: question.image });
+      }
 
-    await ctx.sendPoll(
-      question.question,
-      options,
-      {
-        type: 'quiz',
-        correct_option_id: correctOptionIndex,
-        is_anonymous: false,
-        explanation: question.explanation || 'No explanation provided.',
-      } as any
-    );
+      await ctx.sendPoll(
+        question.question,
+        options,
+        {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any
+      );
+      debug(`Successfully sent quiz to chat ${chatId}`);
+    } catch (pollError) {
+      debug(`Error sending poll or photo to chat ${chatId}:`, pollError);
+      await ctx.reply('Failed to send the question. Please try again later.');
+    }
   } catch (err) {
-    debug('Error sending random question:', err);
+    debug(`Error in sendRandomQuestion for chat ${chatId}:`, err);
     await ctx.reply('Oops! Failed to send a random question.');
   }
 };
 
+// Function to create a fresh context for a chat
+const createContext = (bot: Telegraf<Context>, chatId: string): Context => {
+  return {
+    chat: { id: parseInt(chatId) },
+    reply: async (message: string) => {
+      return bot.telegram.sendMessage(chatId, message);
+    },
+    replyWithPhoto: async (photo: any) => {
+      return bot.telegram.sendPhoto(chatId, photo);
+    },
+    sendPoll: async (question: string, options: string[], optionsObj: any) => {
+      return bot.telegram.sendPoll(chatId, question, options, optionsObj);
+    },
+  } as Context;
+};
+
 // Function to setup auto quiz for a chat
-const setupAutoQuiz = (ctx: Context, chatId: string, intervalMinutes: number) => {
+const setupAutoQuiz = (bot: Telegraf<Context>, chatId: string, intervalMinutes: number) => {
   if (quizIntervals[chatId]) {
     clearInterval(quizIntervals[chatId]);
     delete quizIntervals[chatId];
+    debug(`Cleared existing interval for chat ${chatId}`);
   }
 
   const intervalMs = intervalMinutes * 60 * 1000;
-  quizIntervals[chatId] = setInterval(() => {
-    sendRandomQuestion(ctx);
+  quizIntervals[chatId] = setInterval(async () => {
+    const ctx = createContext(bot, chatId);
+    debug(`Attempting to send auto quiz to chat ${chatId}`);
+    await sendRandomQuestion(ctx);
   }, intervalMs);
 
   debug(`Auto quiz set for chat ${chatId} every ${intervalMinutes} minutes`);
+
+  // Send an immediate quiz to confirm setup
+  const ctx = createContext(bot, chatId);
+  sendRandomQuestion(ctx).catch(err => {
+    debug(`Error sending initial quiz for chat ${chatId}:`, err);
+  });
 };
 
 // Function to clear auto quiz for a chat
@@ -192,10 +324,11 @@ const quizes = () => async (ctx: Context) => {
 
     try {
       await saveGroupSettings(chatId, { quizInterval: intervalMinutes });
-      setupAutoQuiz(ctx, chatId, intervalMinutes);
+      setupAutoQuiz(ctx.telegram, chatId, intervalMinutes);
       await ctx.reply(`Auto quiz set to send a random question every ${intervalMinutes} minutes.`);
     } catch (err) {
-      await ctx.reply('Error setting up auto quiz.');
+      debug(`Error setting up auto quiz for chat ${chatId}:`, err);
+      await CTX.reply('Error setting up auto quiz.');
     }
     return;
   }
@@ -206,6 +339,7 @@ const quizes = () => async (ctx: Context) => {
       clearAutoQuiz(chatId);
       await ctx.reply('Auto quiz scheduling has been removed.');
     } catch (err) {
+      debug(`Error removing auto quiz for chat ${chatId}:`, err);
       await ctx.reply('Error removing auto quiz.');
     }
     return;
@@ -235,36 +369,8 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  const fetchQuestions = async (subject?: string): Promise<any[]> => {
-    try {
-      if (subject) {
-        const response = await fetch(JSON_FILES[subject]);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
-        }
-        return await response.json();
-      } else {
-        const subjects = Object.keys(JSON_FILES);
-        const allQuestions: any[] = [];
-        for (const subj of subjects) {
-          const response = await fetch(JSON_FILES[subj]);
-          if (!response.ok) {
-            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
-            continue;
-          }
-          const questions = await response.json();
-          allQuestions.push(...questions);
-        }
-        return allQuestions;
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
-      throw err;
-    }
-  };
-
-  const getUniqueChapters = (questions: any[]) => {
-    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
+  const getUniqueChapters = (questions: Question[]) => {
+    const chapters = new Set(questions.map((q: Question) => q.chapter?.trim()));
     return Array.from(chapters).filter(ch => ch).sort();
   };
 
@@ -366,7 +472,7 @@ const quizes = () => async (ctx: Context) => {
       }
 
       const filteredByChapter = allQuestions.filter(
-        (q: any) => q.chapter?.trim() === matchedChapter
+        (q: Question) => q.chapter?.trim() === matchedChapter
       );
 
       if (!filteredByChapter.length) {
@@ -385,37 +491,54 @@ const quizes = () => async (ctx: Context) => {
         );
       }
 
-      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
+      const lastQuestion = lastQuestions[chatId];
+      const availableQuestions = lastQuestion
+        ? filteredByChapter.filter(q => (q.id || q.question) !== lastQuestion)
+        : filteredByChapter;
 
-      if (!selected.length) {
-        await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
+      if (!availableQuestions.length) {
+        await ctx.reply(`No new questions available for chapter "${matchedChapter}".`);
         return;
       }
 
+      const shuffled = availableQuestions.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, availableQuestions.length));
+
       for (const question of selected) {
+        if (!isValidQuestion(question)) {
+          debug(`Invalid question data for chapter "${matchedChapter}":`, question);
+          continue;
+        }
+
         const options = [
           question.options.A,
           question.options.B,
           question.options.C,
-          question.options.D
+          question.options.D,
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
-        }
+        try {
+          if (question.image) {
+            await ctx.replyWithPhoto({ url: question.image });
+          }
 
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
+          await ctx.sendPoll(
+            question.question,
+            options,
+            {
+              type: 'quiz',
+              correct_option_id: correctOptionIndex,
+              is_anonymous: false,
+              explanation: question.explanation || 'No explanation provided.',
+            } as any
+          );
+
+          lastQuestions[chatId] = question.id || question.question;
+        } catch (pollError) {
+          debug('Error sending poll or photo:', pollError);
+          await ctx.reply('Failed to send a question. Skipping to the next one.');
+        }
       }
     } catch (err) {
       debug('Error fetching questions:', err);
@@ -448,38 +571,60 @@ const quizes = () => async (ctx: Context) => {
 
     try {
       const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
-
       if (!filtered.length) {
         await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
         return;
       }
 
-      const shuffled = filtered.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(count, filtered.length));
+      const validQuestions = filtered.filter(isValidQuestion);
+      if (!validQuestions.length) {
+        await ctx.reply(`No valid questions available for ${subject || 'the selected subjects'}.`);
+        return;
+      }
+
+      const lastQuestion = lastQuestions[chatId];
+      const availableQuestions = lastQuestion
+        ? validQuestions.filter(q => (q.id || q.question) !== lastQuestion)
+        : validQuestions;
+
+      if (!availableQuestions.length) {
+        await ctx.reply(`No new questions available for ${subject || 'the selected subjects'}.`);
+        return;
+      }
+
+      const shuffled = availableQuestions.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, availableQuestions.length));
 
       for (const question of selected) {
         const options = [
           question.options.A,
           question.options.B,
           question.options.C,
-          question.options.D
+          question.options.D,
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
-        }
+        try {
+          if (question.image) {
+            await ctx.replyWithPhoto({ url: question.image });
+          }
 
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
+          await ctx.sendPoll(
+            question.question,
+            options,
+            {
+              type: 'quiz',
+              correct_option_id: correctOptionIndex,
+              is_anonymous: false,
+              explanation: question.explanation || 'No explanation provided.',
+            } as any
+          );
+
+          lastQuestions[chatId] = question.id || question.question;
+        } catch (pollError) {
+          debug('Error sending poll or photo:', pollError Alphabetical order is not guaranteed in this message. Please check your spelling. The word you are looking for may be spelled differently in different countries. If you are in the US, please check your spelling and try again. If you are in another country, please use the spelling that is common in your country.', pollError);
+          await ctx.reply('Failed to send a question. Skipping to the next one.');
+        }
       }
     } catch (err) {
       debug('Error fetching questions:', err);
@@ -488,30 +633,49 @@ const quizes = () => async (ctx: Context) => {
   }
 };
 
-const initializeAutoQuizzes = async (bot: any) => {
+// Function to ensure webhook is disabled and initialize auto quizzes
+const initializeAutoQuizzes = async (bot: Telegraf<Context>) => {
+  // Ensure webhook is disabled with retries
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const webhookInfo = await bot.telegram.getWebhookInfo();
+      if (webhookInfo.url) {
+        debug(`Webhook active: ${webhookInfo.url}. Deleting webhook (attempt ${attempt})`);
+        await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+        debug('Webhook deleted successfully');
+      } else {
+        debug('No webhook active');
+        break;
+      }
+    } catch (err) {
+      debug(`Error handling webhook (attempt ${attempt}):`, err);
+      if (attempt === maxRetries) {
+        debug('Failed to delete webhook after retries');
+        throw err;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+
   const settingsRef = ref(db, 'groups');
   onValue(settingsRef, (snapshot) => {
     const groups = snapshot.val();
-    if (!groups) return;
+    if (!groups) {
+      debug('No group settings found in Firebase');
+      return;
+    }
+
+    debug('Firebase group settings:', groups);
 
     Object.entries(groups).forEach(([chatId, group]: [string, any]) => {
       if (group.settings?.quizInterval) {
-        const ctx = {
-          chat: { id: parseInt(chatId) },
-          reply: async (message: string) => {
-            return bot.telegram.sendMessage(chatId, message);
-          },
-          replyWithPhoto: async (photo: any) => {
-            return bot.telegram.sendMessage(chatId, photo);
-          },
-          sendPoll: async (question: string, options: string[], optionsObj: any) => {
-            return bot.telegram.sendPoll(chatId, question, options, optionsObj);
-          },
-        } as Context;
-
-        setupAutoQuiz(ctx, chatId, group.settings.quizInterval);
+        debug(`Setting up auto quiz for chat ${chatId} with interval ${group.settings.quizInterval} minutes`);
+        setupAutoQuiz(bot, chatId, group.settings.quizInterval);
       }
     });
+  }, (error) => {
+    debug('Error reading Firebase group settings:', error);
   });
 };
 
