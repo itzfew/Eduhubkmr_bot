@@ -1,8 +1,8 @@
+// src/text/quizes.ts
 import { Context } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
-import { db, ref, set, push } from '../utils/firebase';
-import { get, onValue, remove } from 'firebase/database';
+import { db, ref, set, push, onValue, remove } from '../utils/firebase';
 
 const debug = createDebug('bot:quizes');
 
@@ -37,42 +37,32 @@ const getSimilarityScore = (a: string, b: string): number => {
 const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
   if (!query || !chapters.length) return null;
 
-  // First try exact match (case insensitive)
   const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
   if (exactMatch) return exactMatch;
 
-  // Then try contains match
   const containsMatch = chapters.find(ch =>
     ch.toLowerCase().includes(query.toLowerCase()) ||
     query.toLowerCase().includes(ch.toLowerCase())
   );
   if (containsMatch) return containsMatch;
 
-  // Then try fuzzy matching
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
 
   let bestMatch: string | null = null;
-  let bestScore = 0.5; // Minimum threshold
+  let bestScore = 0.5;
 
   for (const chapter of chapters) {
     const chapterWords = chapter.toLowerCase().split(/\s+/);
+    const matchingWords = queryWords.filter(qw =>
+      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
+    );
+    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
+    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
+    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
 
-    // Calculate word overlap score  
-    const matchingWords = queryWords.filter(qw =>   
-      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)  
-    );  
-
-    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);  
-
-    // Calculate full string similarity  
-    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());  
-
-    // Combined score (weighted towards overlap)  
-    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);  
-
-    if (totalScore > bestScore) {  
-      bestScore = totalScore;  
-      bestMatch = chapter;  
+    if (totalScore > bestScore) {
+      bestScore = totalScore;
+      bestMatch = chapter;
     }
   }
 
@@ -143,13 +133,11 @@ const sendRandomQuestion = async (ctx: Context, subject?: string) => {
 
 // Function to setup auto quiz for a chat
 const setupAutoQuiz = (ctx: Context, chatId: string, intervalMinutes: number) => {
-  // Clear existing interval if any
   if (quizIntervals[chatId]) {
     clearInterval(quizIntervals[chatId]);
     delete quizIntervals[chatId];
   }
 
-  // Set new interval
   const intervalMs = intervalMinutes * 60 * 1000;
   quizIntervals[chatId] = setInterval(() => {
     sendRandomQuestion(ctx);
@@ -184,7 +172,6 @@ const quizes = () => async (ctx: Context) => {
     return;
   }
 
-  // Function to check if user is admin
   const isAdmin = async () => {
     if (!ctx.from) return false;
     try {
@@ -196,7 +183,6 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Handle /setquiztime command
   if (setQuizTimeMatch && (await isAdmin())) {
     const intervalMinutes = parseInt(setQuizTimeMatch[1], 10);
     if (intervalMinutes < 1) {
@@ -214,7 +200,6 @@ const quizes = () => async (ctx: Context) => {
     return;
   }
 
-  // Handle /removequiztime command
   if (removeQuizTimeMatch && (await isAdmin())) {
     try {
       await removeGroupSettings(chatId);
@@ -226,7 +211,6 @@ const quizes = () => async (ctx: Context) => {
     return;
   }
 
-  // Function to create a Telegraph account
   const createTelegraphAccount = async () => {
     try {
       const res = await fetch('https://api.telegra.ph/createAccount', {
@@ -251,7 +235,6 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Function to fetch questions for a specific subject or all subjects
   const fetchQuestions = async (subject?: string): Promise<any[]> => {
     try {
       if (subject) {
@@ -280,13 +263,11 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Function to get unique chapters
   const getUniqueChapters = (questions: any[]) => {
     const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
     return Array.from(chapters).filter(ch => ch).sort();
   };
 
-  // Function to create a Telegraph page with chapters list
   const createTelegraphPage = async (chapters: string[]) => {
     try {
       if (!accessToken) {
@@ -347,7 +328,6 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Function to generate chapters list message with Telegraph link
   const getChaptersMessage = async () => {
     try {
       const allQuestions = await fetchQuestions();
@@ -367,7 +347,6 @@ const quizes = () => async (ctx: Context) => {
     }
   };
 
-  // Handle /chapter command
   if (chapterMatch) {
     const chapterQuery = chapterMatch[1].trim();
     const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
@@ -445,7 +424,6 @@ const quizes = () => async (ctx: Context) => {
     return;
   }
 
-  // Handle /pyq, /b1, /c1, /p1 commands
   if (cmdMatch) {
     const cmd = cmdMatch[1];
     const subjectCode = cmdMatch[2];
@@ -510,7 +488,6 @@ const quizes = () => async (ctx: Context) => {
   }
 };
 
-// Initialize auto quizzes for all groups on bot startup
 const initializeAutoQuizzes = async (bot: any) => {
   const settingsRef = ref(db, 'groups');
   onValue(settingsRef, (snapshot) => {
@@ -525,7 +502,7 @@ const initializeAutoQuizzes = async (bot: any) => {
             return bot.telegram.sendMessage(chatId, message);
           },
           replyWithPhoto: async (photo: any) => {
-            return bot.telegram.sendPhoto(chatId, photo);
+            return bot.telegram.sendMessage(chatId, photo);
           },
           sendPoll: async (question: string, options: string[], optionsObj: any) => {
             return bot.telegram.sendPoll(chatId, question, options, optionsObj);
