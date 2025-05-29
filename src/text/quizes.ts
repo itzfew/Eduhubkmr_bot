@@ -54,7 +54,7 @@ const findBestMatchingChapter = (chapters: string[], query: string): string | nu
   for (const chapter of chapters) {
     const chapterWords = chapter.toLowerCase().split(/\s+/);
     const matchingWords = queryWords.filter(qw =>
-      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7
+      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
     );
     const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
     const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
@@ -133,11 +133,12 @@ const fetchQuestions = async (subject?: string): Promise<any[]> => {
 };
 
 // Function to send a random question with error handling
-const sendRandomQuestion = async (ctx: Context, subject?: string) => {
+const sendRandomQuestion = async (bot: any, chatId: string, subject?: string) => {
   try {
     const questions = await fetchQuestions(subject);
     if (!questions || questions.length === 0) {
       debug(`No questions available for ${subject || 'any subject'}`);
+      await bot.telegram.sendMessage(chatId, '⚠️ No questions available.');
       return false;
     }
 
@@ -152,12 +153,13 @@ const sendRandomQuestion = async (ctx: Context, subject?: string) => {
 
     try {
       if (question.image) {
-        await ctx.replyWithPhoto({ url: question.image }).catch(err => {
+        await bot.telegram.sendPhoto(chatId, { url: question.image }).catch((err: any) => {
           debug('Error sending image:', err);
         });
       }
 
-      await ctx.sendPoll(
+      await bot.telegram.sendPoll(
+        chatId,
         question.question,
         options,
         {
@@ -165,31 +167,35 @@ const sendRandomQuestion = async (ctx: Context, subject?: string) => {
           correct_option_id: correctOptionIndex,
           is_anonymous: false,
           explanation: question.explanation || 'No explanation provided.',
-        } as any
+        }
       );
+      debug(`Sent question to chat ${chatId}`);
       return true;
     } catch (sendError) {
       debug('Error sending question:', sendError);
+      await bot.telegram.sendMessage(chatId, '⚠️ Failed to send question.');
       return false;
     }
   } catch (err) {
     debug('Error in sendRandomQuestion:', err);
+    await bot.telegram.sendMessage(chatId, '⚠️ Error fetching questions.');
     return false;
   }
 };
 
 // Function to setup auto quiz for a chat
-const setupAutoQuiz = async (ctx: Context, chatId: string, intervalMinutes: number) => {
+const setupAutoQuiz = async (bot: any, chatId: string, intervalMinutes: number) => {
   // Clear existing interval if any
   if (quizIntervals[chatId]) {
     clearInterval(quizIntervals[chatId]);
     delete quizIntervals[chatId];
+    debug(`Cleared existing interval for chat ${chatId}`);
   }
 
   // Send initial question immediately
-  const success = await sendRandomQuestion(ctx);
+  const success = await sendRandomQuestion(bot, chatId);
   if (!success) {
-    await ctx.reply('⚠️ Failed to send initial question. Please check if questions are available.');
+    await bot.telegram.sendMessage(chatId, '⚠️ Failed to send initial question.');
     return;
   }
 
@@ -197,9 +203,13 @@ const setupAutoQuiz = async (ctx: Context, chatId: string, intervalMinutes: numb
   const intervalMs = intervalMinutes * 60 * 1000;
   quizIntervals[chatId] = setInterval(async () => {
     try {
-      await sendRandomQuestion(ctx);
+      const success = await sendRandomQuestion(bot, chatId);
+      if (!success) {
+        debug(`Failed to send question in interval for chat ${chatId}`);
+      }
     } catch (err) {
-      debug(`Error in auto quiz for chat ${chatId}:`, err);
+      debug(`Error in auto quiz interval for chat ${chatId}:`, err);
+      await bot.telegram.sendMessage(chatId, '⚠️ Error in auto quiz.');
     }
   }, intervalMs);
 
@@ -252,8 +262,8 @@ const quizes = () => async (ctx: Context) => {
 
     try {
       await saveGroupSettings(chatId, { quizInterval: intervalMinutes });
-      await setupAutoQuiz(ctx, chatId, intervalMinutes);
-      await ctx.reply(`✅ Auto quiz set up successfully!\n\nA random question will be sent every ${intervalMinutes} minutes.`);
+      await setupAutoQuiz(ctx.telegram, chatId, intervalMinutes);
+      await ctx.reply(`✅ Auto quiz set up successfully!\n\nA random question will be sent every ${intervalMinutes} minute(s).`);
     } catch (err) {
       debug('Error setting up auto quiz:', err);
       await ctx.reply('❌ Failed to set up auto quiz. Please try again later.');
@@ -272,7 +282,7 @@ const quizes = () => async (ctx: Context) => {
     }
     return;
   }
-  const createTelegraphAccount = async () => {
+const createTelegraphAccount = async () => {
     try {
       const res = await fetch('https://api.telegra.ph/createAccount', {
         method: 'POST',
@@ -387,7 +397,7 @@ const getUniqueChapters = (questions: any[]) => {
       throw err;
     }
   };
-  const getChaptersMessage = async () => {
+const getChaptersMessage = async () => {
     try {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
@@ -443,7 +453,7 @@ const getUniqueChapters = (questions: any[]) => {
           `(If this isn't correct, please try again with a more specific chapter name)`
         );
       }
-      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
+const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
 
       if (!selected.length) {
@@ -492,7 +502,7 @@ const getUniqueChapters = (questions: any[]) => {
       c: 'chemistry',
       p: 'physics',
     };
-    let subject: string | null = null;
+      let subject: string | null = null;
     let isMixed = false;
 
     if (cmd === 'pyq') {
@@ -544,32 +554,25 @@ const getUniqueChapters = (questions: any[]) => {
     }
   }
 };
+// Initialize auto quizzes from Firebase settings
 const initializeAutoQuizzes = async (bot: any) => {
   const settingsRef = ref(db, 'groups');
   onValue(settingsRef, (snapshot) => {
     const groups = snapshot.val();
-    if (!groups) return;
+    if (!groups) {
+      debug('No group settings found in Firebase');
+      return;
+    }
 
     Object.entries(groups).forEach(([chatId, group]: [string, any]) => {
       if (group.settings?.quizInterval) {
-        const ctx = {
-          chat: { id: parseInt(chatId) },
-          reply: async (message: string) => {
-            return bot.telegram.sendMessage(chatId, message);
-          },
-          replyWithPhoto: async (photo: any) => {
-            return bot.telegram.sendPhoto(chatId, photo);
-          },
-          sendPoll: async (question: string, options: string[], optionsObj: any) => {
-            return bot.telegram.sendPoll(chatId, question, options, optionsObj);
-          },
-        } as Context;
-
-        // Don't await here as it's in a callback
-        setupAutoQuiz(ctx, chatId, group.settings.quizInterval)
+        debug(`Initializing auto quiz for chat ${chatId} with interval ${group.settings.quizInterval} minutes`);
+        setupAutoQuiz(bot, chatId, group.settings.quizInterval)
           .catch(err => debug(`Error initializing auto quiz for ${chatId}:`, err));
       }
     });
+  }, (err) => {
+    debug('Error reading Firebase settings:', err);
   });
 };
 
