@@ -1,4 +1,3 @@
-// src/index.ts
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
@@ -9,7 +8,7 @@ import { study } from './commands/study';
 import { neet } from './commands/neet';
 import { jee } from './commands/jee';
 import { groups } from './commands/groups';
-import { quizes, initializeAutoQuizzes } from './text';
+import { quizes } from './text';
 import { greeting } from './text';
 import { development, production } from './core';
 import { isPrivateChat } from './utils/groupSettings';
@@ -37,12 +36,13 @@ interface PendingQuestion {
     explanation: string;
     image?: string;
   }>;
-  expectingImageFor?: string;
-  awaitingChapterSelection?: boolean;
+  expectingImageFor?: string; // Track poll ID awaiting an image
+  awaitingChapterSelection?: boolean; // Track if waiting for chapter number
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
 
+// --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
   try {
     const res = await fetch('https://api.telegra.ph/createAccount', {
@@ -89,6 +89,7 @@ async function createTelegraphPage(title: string, content: string) {
   }
 }
 
+// --- FETCH CHAPTERS ---
 async function fetchChapters(subject: string): Promise<string[]> {
   const subjectFile = subject.toLowerCase();
   const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
@@ -96,7 +97,7 @@ async function fetchChapters(subject: string): Promise<string[]> {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
     const data = await res.json();
-    const chapters = [...new Set(data.map((item: any) => item.chapter))];
+    const chapters = [...new Set(data.map((item: any) => item.chapter))]; // Unique chapters
     return chapters.sort();
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
@@ -104,6 +105,7 @@ async function fetchChapters(subject: string): Promise<string[]> {
   }
 }
 
+// --- COMMANDS ---
 bot.command('about', about());
 bot.command('help', help());
 bot.command('study', study());
@@ -114,6 +116,7 @@ bot.command(['me', 'user', 'info'], me());
 bot.command('quote', quote());
 bot.command('quiz', playquiz());
 
+// New command to show user count from Google Sheets
 bot.command('users', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
@@ -135,6 +138,7 @@ bot.command('users', async (ctx) => {
   }
 });
 
+// Handle refresh button for user count
 bot.action('refresh_users', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     await ctx.answerCbQuery('Unauthorized');
@@ -158,6 +162,7 @@ bot.action('refresh_users', async (ctx) => {
   }
 });
 
+// Broadcast to all saved chat IDs
 bot.command('broadcast', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
 
@@ -190,6 +195,7 @@ bot.command('broadcast', async (ctx) => {
   await ctx.reply(`✅ Broadcast sent to ${success} users.`);
 });
 
+// Admin reply to user via command
 bot.command('reply', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
 
@@ -215,12 +221,13 @@ bot.command('reply', async (ctx) => {
   }
 });
 
+// Handle /add<subject> or /add<Subject>__<Chapter> commands
 bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
   }
 
-  const command = ctx.message.text?.split(' ')[0].substring(1);
+  const command = ctx.message.text?.split(' ')[0].substring(1); // Remove leading '/'
   const countStr = ctx.message.text?.split(' ')[1];
   const count = parseInt(countStr, 10);
 
@@ -239,15 +246,18 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     subject = command.replace('add', '').replace(/_/g, ' ');
   }
 
+  // Fetch chapters for the subject
   const chapters = await fetchChapters(subject);
   if (chapters.length === 0) {
     return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
   }
 
+  // Create numbered list of chapters
   const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
   const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
   const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
 
+  // Store pending submission with flag for chapter selection
   pendingSubmissions[ctx.from.id] = {
     subject,
     chapter,
@@ -262,6 +272,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   await ctx.reply(replyText, { parse_mode: 'Markdown' });
 });
 
+// User greeting and message handling
 bot.start(async (ctx) => {
   if (isPrivateChat(ctx.chat.type)) {
     await ctx.reply('Welcome! Use /help to explore commands.');
@@ -269,19 +280,24 @@ bot.start(async (ctx) => {
   }
 });
 
+// Handle button clicks (quiz)
 bot.on('callback_query', handleQuizActions());
 
+// --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
-  const msg = ctx.message as any;
+  const msg = ctx.message as any; // Avoid TS for ctx.message.poll
   const chatType = chat.type;
 
   if (!chat?.id) return;
 
+  // Save chat ID locally
   saveChatId(chat.id);
 
+  // Save to Google Sheet and check if user is new
   const alreadyNotified = await saveToSheet(chat);
 
+  // Notify admin once only for new users (private chat)
   if (chat.id !== ADMIN_ID && !alreadyNotified) {
     if (chat.type === 'private' && 'first_name' in chat) {
       const usernameText = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
@@ -293,6 +309,7 @@ bot.on('message', async (ctx) => {
     }
   }
 
+  // Handle /contact messages
   if (msg.text?.startsWith('/contact')) {
     const userMessage = msg.text.replace('/contact', '').trim() || msg.reply_to_message?.text;
     if (userMessage) {
@@ -311,6 +328,7 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Admin replies via swipe reply
   if (chat.id === ADMIN_ID && msg.reply_to_message?.text) {
     const match = msg.reply_to_message.text.match(/Chat ID: (\d+)/);
     if (match) {
@@ -324,6 +342,7 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Handle chapter selection for admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
     const submission = pendingSubmissions[chat.id];
     const chapterNumber = parseInt(msg.text.trim(), 10);
@@ -347,6 +366,7 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Handle question submissions from admin (quiz polls)
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
     const poll = msg.poll;
@@ -385,7 +405,7 @@ bot.on('message', async (ctx) => {
     };
 
     submission.questions.push(question);
-    submission.expectingImageFor = poll.id;
+    submission.expectingImageFor = poll.id; // Track poll ID for potential image
 
     if (submission.questions.length < submission.count) {
       await ctx.reply(
@@ -393,6 +413,7 @@ bot.on('message', async (ctx) => {
         `then send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`
       );
     } else {
+      // Save all questions to Firebase
       try {
         const questionsRef = ref(db, 'questions');
         for (const q of submission.questions) {
@@ -409,6 +430,7 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Handle image URL or skip for admin question submissions
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.text && pendingSubmissions[chat.id].expectingImageFor) {
     const submission = pendingSubmissions[chat.id];
     const lastQuestion = submission.questions[submission.questions.length - 1];
@@ -431,10 +453,12 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Detect Telegram Poll and send JSON to admin
   if (msg.poll) {
     const poll = msg.poll;
     const pollJson = JSON.stringify(poll, null, 2);
 
+    // Save poll data to Firebase Realtime Database under /polls/
     try {
       const pollsRef = ref(db, 'polls');
       const newPollRef = push(pollsRef);
@@ -466,23 +490,16 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  // Run quiz for all chats
   await quizes()(ctx);
 
+  // Greet in private chats
   if (isPrivateChat(chatType)) {
     await greeting()(ctx);
   }
 });
 
-bot.launch().then(() => {
-  initializeAutoQuizzes(bot);
-  console.log('Bot started and auto quizzes initialized');
-}).catch((err) => {
-  console.error('Failed to launch bot:', err);
-});
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
+// --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
   await production(req, res, bot);
 };
