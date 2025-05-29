@@ -26,6 +26,16 @@ interface GroupSettings {
   quizInterval?: number; // Interval in minutes
 }
 
+// Interface for a question
+interface Question {
+  question: string;
+  options: { A: string; B: string; C: string; D: string };
+  correct_option: string;
+  explanation?: string;
+  image?: string;
+  chapter?: string;
+}
+
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
   const maxLength = Math.max(a.length, b.length);
@@ -77,7 +87,7 @@ const saveGroupSettings = async (chatId: string, settings: GroupSettings) => {
     debug(`Saved settings for chat ${chatId}`);
   } catch (err) {
     debug(`Error saving settings for chat ${chatId}:`, err);
-    throw err;
+    throw new Error('Failed to save group settings to Firebase.');
   }
 };
 
@@ -89,58 +99,100 @@ const removeGroupSettings = async (chatId: string) => {
     debug(`Removed settings for chat ${chatId}`);
   } catch (err) {
     debug(`Error removing settings for chat ${chatId}:`, err);
-    throw err;
+    throw new Error('Failed to remove group settings from Firebase.');
   }
+};
+
+// Function to validate a question
+const isValidQuestion = (question: any): question is Question => {
+  return (
+    question &&
+    typeof question.question === 'string' &&
+    question.question.trim() !== '' &&
+    question.options &&
+    typeof question.options === 'object' &&
+    ['A', 'B', 'C', 'D'].every(key => typeof question.options[key] === 'string' && question.options[key].trim() !== '') &&
+    typeof question.correct_option === 'string' &&
+    ['A', 'B', 'C', 'D'].includes(question.correct_option) &&
+    (question.explanation == null || typeof question.explanation === 'string') &&
+    (question.image == null || typeof question.image === 'string')
+  );
 };
 
 // Function to send a random question
 const sendRandomQuestion = async (ctx: Context, subject?: string) => {
   try {
     const questions = await fetchQuestions(subject);
-    if (!questions.length) {
-      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+    const validQuestions = questions.filter(isValidQuestion);
+
+    if (!validQuestions.length) {
+      debug(`No valid questions available for ${subject || 'the selected subjects'}.`);
+      await ctx.reply(`No valid questions available for ${subject || 'the selected subjects'}.`);
       return;
     }
 
-    const question = questions[Math.floor(Math.random() * questions.length)];
+    const question = validQuestions[Math.floor(Math.random() * validQuestions.length)];
     const options = [
       question.options.A,
       question.options.B,
       question.options.C,
-      question.options.D
+      question.options.D,
     ];
     const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-    if (question.image) {
-      await ctx.replyWithPhoto({ url: question.image });
+    try {
+      if (question.image) {
+        await ctx.replyWithPhoto({ url: question.image });
+      }
+    } catch (photoErr) {
+      debug(`Error sending photo for question: ${question.question}`, photoErr);
+      await ctx.reply('Failed to send question image, proceeding with question text.');
     }
 
-    await ctx.sendPoll(
-      question.question,
-      options,
-      {
-        type: 'quiz',
-        correct_option_id: correctOptionIndex,
-        is_anonymous: false,
-        explanation: question.explanation || 'No explanation provided.',
-      } as any
-    );
+    try {
+      await ctx.sendPoll(
+        question.question,
+        options,
+        {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any
+      );
+      debug(`Sent question: ${question.question}`);
+    } catch (pollErr) {
+      debug(`Error sending poll for question: ${question.question}`, pollErr);
+      await ctx.reply('Failed to send the quiz poll.');
+    }
   } catch (err) {
-    debug('Error sending random question:', err);
-    await ctx.reply('Oops! Failed to send a random question.');
+    debug('Error in sendRandomQuestion:', err);
+    await ctx.reply('Failed to load or send a random question. Please try again later.');
   }
 };
 
 // Function to setup auto quiz for a chat
-const setupAutoQuiz = (ctx: Context, chatId: string, intervalMinutes: number) => {
-  if (quizIntervals[chatId]) {
-    clearInterval(quizIntervals[chatId]);
-    delete quizIntervals[chatId];
+const setupAutoQuiz = async (ctx: Context, chatId: string, intervalMinutes: number) => {
+  // Clear any existing interval
+  clearAutoQuiz(chatId);
+
+  // Send the first question immediately
+  try {
+    await sendRandomQuestion(ctx);
+  } catch (err) {
+    debug(`Error sending initial question for chat ${chatId}:`, err);
+    await ctx.reply('Failed to send the first quiz question, but scheduling will continue.');
   }
 
+  // Set up the interval for subsequent questions
   const intervalMs = intervalMinutes * 60 * 1000;
-  quizIntervals[chatId] = setInterval(() => {
-    sendRandomQuestion(ctx);
+  quizIntervals[chatId] = setInterval(async () => {
+    try {
+      await sendRandomQuestion(ctx);
+    } catch (err) {
+      debug(`Error in auto quiz for chat ${chatId}:`, err);
+      await ctx.reply('Failed to send a scheduled quiz question.');
+    }
   }, intervalMs);
 
   debug(`Auto quiz set for chat ${chatId} every ${intervalMinutes} minutes`);
@@ -192,10 +244,11 @@ const quizes = () => async (ctx: Context) => {
 
     try {
       await saveGroupSettings(chatId, { quizInterval: intervalMinutes });
-      setupAutoQuiz(ctx, chatId, intervalMinutes);
-      await ctx.reply(`Auto quiz set to send a random question every ${intervalMinutes} minutes.`);
+      await setupAutoQuiz(ctx, chatId, intervalMinutes);
+      await ctx.reply(`Auto quiz set to send a random question every ${intervalMinutes} minutes. First question sent!`);
     } catch (err) {
-      await ctx.reply('Error setting up auto quiz.');
+      debug('Error setting up auto quiz:', err);
+      await ctx.reply('Error setting up auto quiz. Please try again.');
     }
     return;
   }
@@ -206,6 +259,7 @@ const quizes = () => async (ctx: Context) => {
       clearAutoQuiz(chatId);
       await ctx.reply('Auto quiz scheduling has been removed.');
     } catch (err) {
+      debug('Error removing auto quiz:', err);
       await ctx.reply('Error removing auto quiz.');
     }
     return;
@@ -231,40 +285,46 @@ const quizes = () => async (ctx: Context) => {
       }
     } catch (err) {
       debug('Error creating Telegraph account:', err);
-      throw err;
+      throw new Error('Failed to create Telegraph account.');
     }
   };
 
-  const fetchQuestions = async (subject?: string): Promise<any[]> => {
+  const fetchQuestions = async (subject?: string): Promise<Question[]> => {
     try {
       if (subject) {
         const response = await fetch(JSON_FILES[subject]);
         if (!response.ok) {
           throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
         }
-        return await response.json();
+        const questions = await response.json();
+        return questions.filter(isValidQuestion);
       } else {
         const subjects = Object.keys(JSON_FILES);
-        const allQuestions: any[] = [];
+        const allQuestions: Question[] = [];
         for (const subj of subjects) {
-          const response = await fetch(JSON_FILES[subj]);
-          if (!response.ok) {
-            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+          try {
+            const response = await fetch(JSON_FILES[subj]);
+            if (!response.ok) {
+              debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+              continue;
+            }
+            const questions = await response.json();
+            allQuestions.push(...questions.filter(isValidQuestion));
+          } catch (err) {
+            debug(`Error fetching ${subj} questions:`, err);
             continue;
           }
-          const questions = await response.json();
-          allQuestions.push(...questions);
         }
         return allQuestions;
       }
     } catch (err) {
       debug('Error fetching questions:', err);
-      throw err;
+      throw new Error('Failed to fetch questions.');
     }
   };
 
-  const getUniqueChapters = (questions: any[]) => {
-    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
+  const getUniqueChapters = (questions: Question[]) => {
+    const chapters = new Set(questions.map((q: Question) => q.chapter?.trim()));
     return Array.from(chapters).filter(ch => ch).sort();
   };
 
@@ -324,7 +384,7 @@ const quizes = () => async (ctx: Context) => {
       }
     } catch (err) {
       debug('Error creating Telegraph page:', err);
-      throw err;
+      throw new Error('Failed to create Telegraph page.');
     }
   };
 
@@ -343,7 +403,7 @@ const quizes = () => async (ctx: Context) => {
       };
     } catch (err) {
       debug('Error generating chapters message:', err);
-      throw err;
+      throw new Error('Failed to generate chapters message.');
     }
   };
 
@@ -366,7 +426,7 @@ const quizes = () => async (ctx: Context) => {
       }
 
       const filteredByChapter = allQuestions.filter(
-        (q: any) => q.chapter?.trim() === matchedChapter
+        (q: Question) => q.chapter?.trim() === matchedChapter
       );
 
       if (!filteredByChapter.length) {
@@ -398,28 +458,39 @@ const quizes = () => async (ctx: Context) => {
           question.options.A,
           question.options.B,
           question.options.C,
-          question.options.D
+          question.options.D,
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
+        try {
+          if (question.image) {
+            await ctx.replyWithPhoto({ url: question.image });
+          }
+        } catch (photoErr) {
+          debug(`Error sending photo for question: ${question.question}`, photoErr);
+          await ctx.reply('Failed to send question image, proceeding with question text.');
         }
 
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
+        try {
+          await ctx.sendPoll(
+            question.question,
+            options,
+            {
+              type: 'quiz',
+              correct_option_id: correctOptionIndex,
+              is_anonymous: false,
+              explanation: question.explanation || 'No explanation provided.',
+            } as any
+          );
+          debug(`Sent question: ${question.question}`);
+        } catch (pollErr) {
+          debug(`Error sending poll for question: ${question.question}`, pollErr);
+          await ctx.reply('Failed to send the quiz poll.');
+        }
       }
     } catch (err) {
       debug('Error fetching questions:', err);
-      await ctx.reply('Oops! Failed to load questions.');
+      await ctx.reply('Failed to load questions. Please try again later.');
     }
     return;
   }
@@ -450,7 +521,7 @@ const quizes = () => async (ctx: Context) => {
       const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
 
       if (!filtered.length) {
-        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+        await ctx.reply(`No valid questions available for ${subject || 'the selected subjects'}.`);
         return;
       }
 
@@ -462,28 +533,39 @@ const quizes = () => async (ctx: Context) => {
           question.options.A,
           question.options.B,
           question.options.C,
-          question.options.D
+          question.options.D,
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
+        try {
+          if (question.image) {
+            await ctx.replyWithPhoto({ url: question.image });
+          }
+        } catch (photoErr) {
+          debug(`Error sending photo for question: ${question.question}`, photoErr);
+          await ctx.reply('Failed to send question image, proceeding with question text.');
         }
 
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
+        try {
+          await ctx.sendPoll(
+            question.question,
+            options,
+            {
+              type: 'quiz',
+              correct_option_id: correctOptionIndex,
+              is_anonymous: false,
+              explanation: question.explanation || 'No explanation provided.',
+            } as any
+          );
+          debug(`Sent question: ${question.question}`);
+        } catch (pollErr) {
+          debug(`Error sending poll for question: ${question.question}`, pollErr);
+          await ctx.reply('Failed to send the quiz poll.');
+        }
       }
     } catch (err) {
       debug('Error fetching questions:', err);
-      await ctx.reply('Oops! Failed to load questions.');
+      await ctx.reply('Failed to load questions. Please try again later.');
     }
   }
 };
@@ -502,7 +584,7 @@ const initializeAutoQuizzes = async (bot: any) => {
             return bot.telegram.sendMessage(chatId, message);
           },
           replyWithPhoto: async (photo: any) => {
-            return bot.telegram.sendMessage(chatId, photo);
+            return bot.telegram.sendPhoto(chatId, photo);
           },
           sendPoll: async (question: string, options: string[], optionsObj: any) => {
             return bot.telegram.sendPoll(chatId, question, options, optionsObj);
