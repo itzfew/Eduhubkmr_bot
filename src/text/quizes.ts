@@ -1,6 +1,8 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
+import { db, ref, set, push } from './utils/firebase';
+import { get, onValue, remove } from 'firebase/database';
 
 const debug = createDebug('bot:quizes');
 
@@ -16,6 +18,14 @@ const JSON_FILES: Record<string, string> = {
   physics: `${BASE_URL}physics.json`,
 };
 
+// Map to store interval IDs for each chat
+const quizIntervals: Record<string, NodeJS.Timeout> = {};
+
+// Interface for group settings
+interface GroupSettings {
+  quizInterval?: number; // Interval in minutes
+}
+
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
   const maxLength = Math.max(a.length, b.length);
@@ -26,47 +36,135 @@ const getSimilarityScore = (a: string, b: string): number => {
 // Function to find best matching chapter using fuzzy search
 const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
   if (!query || !chapters.length) return null;
-  
+
   // First try exact match (case insensitive)
   const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
   if (exactMatch) return exactMatch;
 
   // Then try contains match
-  const containsMatch = chapters.find(ch => 
-    ch.toLowerCase().includes(query.toLowerCase()) || 
+  const containsMatch = chapters.find(ch =>
+    ch.toLowerCase().includes(query.toLowerCase()) ||
     query.toLowerCase().includes(ch.toLowerCase())
   );
   if (containsMatch) return containsMatch;
 
   // Then try fuzzy matching
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  
+
   let bestMatch: string | null = null;
   let bestScore = 0.5; // Minimum threshold
 
   for (const chapter of chapters) {
     const chapterWords = chapter.toLowerCase().split(/\s+/);
-    
-    // Calculate word overlap score
-    const matchingWords = queryWords.filter(qw => 
-      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
-    );
-    
-    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
-    
-    // Calculate full string similarity
-    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
-    
-    // Combined score (weighted towards overlap)
-    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
-    
-    if (totalScore > bestScore) {
-      bestScore = totalScore;
-      bestMatch = chapter;
+
+    // Calculate word overlap score  
+    const matchingWords = queryWords.filter(qw =>   
+      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)  
+    );  
+
+    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);  
+
+    // Calculate full string similarity  
+    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());  
+
+    // Combined score (weighted towards overlap)  
+    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);  
+
+    if (totalScore > bestScore) {  
+      bestScore = totalScore;  
+      bestMatch = chapter;  
     }
   }
 
   return bestMatch;
+};
+
+// Function to save group settings to Firebase
+const saveGroupSettings = async (chatId: string, settings: GroupSettings) => {
+  try {
+    const settingsRef = ref(db, `groups/${chatId}/settings`);
+    await set(settingsRef, settings);
+    debug(`Saved settings for chat ${chatId}`);
+  } catch (err) {
+    debug(`Error saving settings for chat ${chatId}:`, err);
+    throw err;
+  }
+};
+
+// Function to remove group settings from Firebase
+const removeGroupSettings = async (chatId: string) => {
+  try {
+    const settingsRef = ref(db, `groups/${chatId}/settings`);
+    await remove(settingsRef);
+    debug(`Removed settings for chat ${chatId}`);
+  } catch (err) {
+    debug(`Error removing settings for chat ${chatId}:`, err);
+    throw err;
+  }
+};
+
+// Function to send a random question
+const sendRandomQuestion = async (ctx: Context, subject?: string) => {
+  try {
+    const questions = await fetchQuestions(subject);
+    if (!questions.length) {
+      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+      return;
+    }
+
+    const question = questions[Math.floor(Math.random() * questions.length)];
+    const options = [
+      question.options.A,
+      question.options.B,
+      question.options.C,
+      question.options.D
+    ];
+    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+
+    if (question.image) {
+      await ctx.replyWithPhoto({ url: question.image });
+    }
+
+    await ctx.sendPoll(
+      question.question,
+      options,
+      {
+        type: 'quiz',
+        correct_option_id: correctOptionIndex,
+        is_anonymous: false,
+        explanation: question.explanation || 'No explanation provided.',
+      } as any
+    );
+  } catch (err) {
+    debug('Error sending random question:', err);
+    await ctx.reply('Oops! Failed to send a random question.');
+  }
+};
+
+// Function to setup auto quiz for a chat
+const setupAutoQuiz = (ctx: Context, chatId: string, intervalMinutes: number) => {
+  // Clear existing interval if any
+  if (quizIntervals[chatId]) {
+    clearInterval(quizIntervals[chatId]);
+    delete quizIntervals[chatId];
+  }
+
+  // Set new interval
+  const intervalMs = intervalMinutes * 60 * 1000;
+  quizIntervals[chatId] = setInterval(() => {
+    sendRandomQuestion(ctx);
+  }, intervalMs);
+
+  debug(`Auto quiz set for chat ${chatId} every ${intervalMinutes} minutes`);
+};
+
+// Function to clear auto quiz for a chat
+const clearAutoQuiz = (chatId: string) => {
+  if (quizIntervals[chatId]) {
+    clearInterval(quizIntervals[chatId]);
+    delete quizIntervals[chatId];
+    debug(`Auto quiz cleared for chat ${chatId}`);
+  }
 };
 
 const quizes = () => async (ctx: Context) => {
@@ -77,6 +175,56 @@ const quizes = () => async (ctx: Context) => {
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
   const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const setQuizTimeMatch = text.match(/^\/setquiztime\s+(\d+)$/);
+  const removeQuizTimeMatch = text.match(/^\/removequiztime$/);
+
+  const chatId = ctx.chat?.id.toString();
+  if (!chatId) {
+    await ctx.reply('Error: Unable to identify chat.');
+    return;
+  }
+
+  // Function to check if user is admin
+  const isAdmin = async () => {
+    if (!ctx.from) return false;
+    try {
+      const member = await ctx.getChatMember(ctx.from.id);
+      return member.status === 'administrator' || member.status === 'creator';
+    } catch (err) {
+      debug('Error checking admin status:', err);
+      return false;
+    }
+  };
+
+  // Handle /setquiztime command
+  if (setQuizTimeMatch && (await isAdmin())) {
+    const intervalMinutes = parseInt(setQuizTimeMatch[1], 10);
+    if (intervalMinutes < 1) {
+      await ctx.reply('Please provide a valid interval in minutes (minimum 1).');
+      return;
+    }
+
+    try {
+      await saveGroupSettings(chatId, { quizInterval: intervalMinutes });
+      setupAutoQuiz(ctx, chatId, intervalMinutes);
+      await ctx.reply(`Auto quiz set to send a random question every ${intervalMinutes} minutes.`);
+    } catch (err) {
+      await ctx.reply('Error setting up auto quiz.');
+    }
+    return;
+  }
+
+  // Handle /removequiztime command
+  if (removeQuizTimeMatch && (await isAdmin())) {
+    try {
+      await removeGroupSettings(chatId);
+      clearAutoQuiz(chatId);
+      await ctx.reply('Auto quiz scheduling has been removed.');
+    } catch (err) {
+      await ctx.reply('Error removing auto quiz.');
+    }
+    return;
+  }
 
   // Function to create a Telegraph account
   const createTelegraphAccount = async () => {
@@ -107,14 +255,12 @@ const quizes = () => async (ctx: Context) => {
   const fetchQuestions = async (subject?: string): Promise<any[]> => {
     try {
       if (subject) {
-        // Fetch questions for a specific subject
         const response = await fetch(JSON_FILES[subject]);
         if (!response.ok) {
           throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
         }
         return await response.json();
       } else {
-        // Fetch questions from all subjects
         const subjects = Object.keys(JSON_FILES);
         const allQuestions: any[] = [];
         for (const subj of subjects) {
@@ -229,10 +375,9 @@ const quizes = () => async (ctx: Context) => {
     try {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
-      
-      // Find the best matching chapter using fuzzy search
+
       const matchedChapter = findBestMatchingChapter(chapters, chapterQuery);
-      
+
       if (!matchedChapter) {
         const { message } = await getChaptersMessage();
         await ctx.replyWithHTML(
@@ -253,7 +398,6 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // If the matched chapter isn't an exact match, confirm with user
       if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
         await ctx.replyWithHTML(
           `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
@@ -278,11 +422,11 @@ const quizes = () => async (ctx: Context) => {
           question.options.D
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-        
+
         if (question.image) {
           await ctx.replyWithPhoto({ url: question.image });
         }
-        
+
         await ctx.sendPoll(
           question.question,
           options,
@@ -303,8 +447,8 @@ const quizes = () => async (ctx: Context) => {
 
   // Handle /pyq, /b1, /c1, /p1 commands
   if (cmdMatch) {
-    const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-    const subjectCode = cmdMatch[2]; // b, c, p
+    const cmd = cmdMatch[1];
+    const subjectCode = cmdMatch[2];
     const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
 
     const subjectMap: Record<string, string> = {
@@ -312,10 +456,10 @@ const quizes = () => async (ctx: Context) => {
       c: 'chemistry',
       p: 'physics',
     };
-    
+
     let subject: string | null = null;
     let isMixed = false;
-    
+
     if (cmd === 'pyq') {
       isMixed = true;
     } else if (subjectCode) {
@@ -326,7 +470,7 @@ const quizes = () => async (ctx: Context) => {
 
     try {
       const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
-      
+
       if (!filtered.length) {
         await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
         return;
@@ -343,11 +487,11 @@ const quizes = () => async (ctx: Context) => {
           question.options.D
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-        
+
         if (question.image) {
           await ctx.replyWithPhoto({ url: question.image });
         }
-        
+
         await ctx.sendPoll(
           question.question,
           options,
@@ -366,4 +510,32 @@ const quizes = () => async (ctx: Context) => {
   }
 };
 
-export { quizes };
+// Initialize auto quizzes for all groups on bot startup
+const initializeAutoQuizzes = async (bot: any) => {
+  const settingsRef = ref(db, 'groups');
+  onValue(settingsRef, (snapshot) => {
+    const groups = snapshot.val();
+    if (!groups) return;
+
+    Object.entries(groups).forEach(([chatId, group]: [string, any]) => {
+      if (group.settings?.quizInterval) {
+        const ctx = {
+          chat: { id: parseInt(chatId) },
+          reply: async (message: string) => {
+            return bot.telegram.sendMessage(chatId, message);
+          },
+          replyWithPhoto: async (photo: any) => {
+            return bot.telegram.sendPhoto(chatId, photo);
+          },
+          sendPoll: async (question: string, options: string[], optionsObj: any) => {
+            return bot.telegram.sendPoll(chatId, question, options, optionsObj);
+          },
+        } as Context;
+
+        setupAutoQuiz(ctx, chatId, group.settings.quizInterval);
+      }
+    });
+  });
+};
+
+export { quizes, initializeAutoQuizzes };
