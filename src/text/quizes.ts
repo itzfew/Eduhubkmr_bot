@@ -26,16 +26,6 @@ interface GroupSettings {
   quizInterval?: number; // Interval in minutes
 }
 
-// Interface for a question
-interface Question {
-  question: string;
-  options: { A: string; B: string; C: string; D: string };
-  correct_option: string;
-  explanation?: string;
-  image?: string;
-  chapter?: string;
-}
-
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
   const maxLength = Math.max(a.length, b.length);
@@ -64,7 +54,7 @@ const findBestMatchingChapter = (chapters: string[], query: string): string | nu
   for (const chapter of chapters) {
     const chapterWords = chapter.toLowerCase().split(/\s+/);
     const matchingWords = queryWords.filter(qw =>
-      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
+      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7
     );
     const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
     const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
@@ -87,7 +77,7 @@ const saveGroupSettings = async (chatId: string, settings: GroupSettings) => {
     debug(`Saved settings for chat ${chatId}`);
   } catch (err) {
     debug(`Error saving settings for chat ${chatId}:`, err);
-    throw new Error('Failed to save group settings to Firebase.');
+    throw err;
   }
 };
 
@@ -99,57 +89,74 @@ const removeGroupSettings = async (chatId: string) => {
     debug(`Removed settings for chat ${chatId}`);
   } catch (err) {
     debug(`Error removing settings for chat ${chatId}:`, err);
-    throw new Error('Failed to remove group settings from Firebase.');
+    throw err;
   }
 };
 
-// Function to validate a question
-const isValidQuestion = (question: any): question is Question => {
-  return (
-    question &&
-    typeof question.question === 'string' &&
-    question.question.trim() !== '' &&
-    question.options &&
-    typeof question.options === 'object' &&
-    ['A', 'B', 'C', 'D'].every(key => typeof question.options[key] === 'string' && question.options[key].trim() !== '') &&
-    typeof question.correct_option === 'string' &&
-    ['A', 'B', 'C', 'D'].includes(question.correct_option) &&
-    (question.explanation == null || typeof question.explanation === 'string') &&
-    (question.image == null || typeof question.image === 'string')
-  );
+// Function to fetch questions with retry logic
+const fetchQuestions = async (subject?: string): Promise<any[]> => {
+  const MAX_RETRIES = 3;
+  let retries = 0;
+
+  while (retries < MAX_RETRIES) {
+    try {
+      if (subject) {
+        const response = await fetch(JSON_FILES[subject]);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
+        }
+        return await response.json();
+      } else {
+        const subjects = Object.keys(JSON_FILES);
+        const allQuestions: any[] = [];
+        for (const subj of subjects) {
+          const response = await fetch(JSON_FILES[subj]);
+          if (!response.ok) {
+            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+            continue;
+          }
+          const questions = await response.json();
+          allQuestions.push(...questions);
+        }
+        return allQuestions;
+      }
+    } catch (err) {
+      retries++;
+      if (retries >= MAX_RETRIES) {
+        debug(`Failed to fetch questions after ${MAX_RETRIES} attempts:`, err);
+        throw err;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+    }
+  }
+  return [];
 };
 
-// Function to send a random question
+// Function to send a random question with error handling
 const sendRandomQuestion = async (ctx: Context, subject?: string) => {
   try {
     const questions = await fetchQuestions(subject);
-    const validQuestions = questions.filter(isValidQuestion);
-
-    if (!validQuestions.length) {
-      debug(`No valid questions available for ${subject || 'the selected subjects'}.`);
-      await ctx.reply(`No valid questions available for ${subject || 'the selected subjects'}.`);
-      return;
+    if (!questions || questions.length === 0) {
+      debug(`No questions available for ${subject || 'any subject'}`);
+      return false;
     }
 
-    const question = validQuestions[Math.floor(Math.random() * validQuestions.length)];
+    const question = questions[Math.floor(Math.random() * questions.length)];
     const options = [
       question.options.A,
       question.options.B,
       question.options.C,
-      question.options.D,
+      question.options.D
     ];
     const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
     try {
       if (question.image) {
-        await ctx.replyWithPhoto({ url: question.image });
+        await ctx.replyWithPhoto({ url: question.image }).catch(err => {
+          debug('Error sending image:', err);
+        });
       }
-    } catch (photoErr) {
-      debug(`Error sending photo for question: ${question.question}`, photoErr);
-      await ctx.reply('Failed to send question image, proceeding with question text.');
-    }
 
-    try {
       await ctx.sendPoll(
         question.question,
         options,
@@ -160,28 +167,30 @@ const sendRandomQuestion = async (ctx: Context, subject?: string) => {
           explanation: question.explanation || 'No explanation provided.',
         } as any
       );
-      debug(`Sent question: ${question.question}`);
-    } catch (pollErr) {
-      debug(`Error sending poll for question: ${question.question}`, pollErr);
-      await ctx.reply('Failed to send the quiz poll.');
+      return true;
+    } catch (sendError) {
+      debug('Error sending question:', sendError);
+      return false;
     }
   } catch (err) {
     debug('Error in sendRandomQuestion:', err);
-    await ctx.reply('Failed to load or send a random question. Please try again later.');
+    return false;
   }
 };
 
 // Function to setup auto quiz for a chat
 const setupAutoQuiz = async (ctx: Context, chatId: string, intervalMinutes: number) => {
-  // Clear any existing interval
-  clearAutoQuiz(chatId);
+  // Clear existing interval if any
+  if (quizIntervals[chatId]) {
+    clearInterval(quizIntervals[chatId]);
+    delete quizIntervals[chatId];
+  }
 
-  // Send the first question immediately
-  try {
-    await sendRandomQuestion(ctx);
-  } catch (err) {
-    debug(`Error sending initial question for chat ${chatId}:`, err);
-    await ctx.reply('Failed to send the first quiz question, but scheduling will continue.');
+  // Send initial question immediately
+  const success = await sendRandomQuestion(ctx);
+  if (!success) {
+    await ctx.reply('⚠️ Failed to send initial question. Please check if questions are available.');
+    return;
   }
 
   // Set up the interval for subsequent questions
@@ -191,7 +200,6 @@ const setupAutoQuiz = async (ctx: Context, chatId: string, intervalMinutes: numb
       await sendRandomQuestion(ctx);
     } catch (err) {
       debug(`Error in auto quiz for chat ${chatId}:`, err);
-      await ctx.reply('Failed to send a scheduled quiz question.');
     }
   }, intervalMs);
 
@@ -237,18 +245,18 @@ const quizes = () => async (ctx: Context) => {
 
   if (setQuizTimeMatch && (await isAdmin())) {
     const intervalMinutes = parseInt(setQuizTimeMatch[1], 10);
-    if (intervalMinutes < 1) {
-      await ctx.reply('Please provide a valid interval in minutes (minimum 1).');
+    if (intervalMinutes < 1 || intervalMinutes > 1440) {
+      await ctx.reply('Please provide a valid interval in minutes (1-1440).');
       return;
     }
 
     try {
       await saveGroupSettings(chatId, { quizInterval: intervalMinutes });
       await setupAutoQuiz(ctx, chatId, intervalMinutes);
-      await ctx.reply(`Auto quiz set to send a random question every ${intervalMinutes} minutes. First question sent!`);
+      await ctx.reply(`✅ Auto quiz set up successfully!\n\nA random question will be sent every ${intervalMinutes} minutes.`);
     } catch (err) {
       debug('Error setting up auto quiz:', err);
-      await ctx.reply('Error setting up auto quiz. Please try again.');
+      await ctx.reply('❌ Failed to set up auto quiz. Please try again later.');
     }
     return;
   }
@@ -257,14 +265,13 @@ const quizes = () => async (ctx: Context) => {
     try {
       await removeGroupSettings(chatId);
       clearAutoQuiz(chatId);
-      await ctx.reply('Auto quiz scheduling has been removed.');
+      await ctx.reply('✅ Auto quiz scheduling has been removed.');
     } catch (err) {
       debug('Error removing auto quiz:', err);
-      await ctx.reply('Error removing auto quiz.');
+      await ctx.reply('❌ Failed to remove auto quiz. Please try again later.');
     }
     return;
   }
-
   const createTelegraphAccount = async () => {
     try {
       const res = await fetch('https://api.telegra.ph/createAccount', {
@@ -285,46 +292,39 @@ const quizes = () => async (ctx: Context) => {
       }
     } catch (err) {
       debug('Error creating Telegraph account:', err);
-      throw new Error('Failed to create Telegraph account.');
+      throw err;
     }
   };
 
-  const fetchQuestions = async (subject?: string): Promise<Question[]> => {
+  const fetchQuestions = async (subject?: string): Promise<any[]> => {
     try {
       if (subject) {
         const response = await fetch(JSON_FILES[subject]);
         if (!response.ok) {
           throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
         }
-        const questions = await response.json();
-        return questions.filter(isValidQuestion);
+        return await response.json();
       } else {
         const subjects = Object.keys(JSON_FILES);
-        const allQuestions: Question[] = [];
+        const allQuestions: any[] = [];
         for (const subj of subjects) {
-          try {
-            const response = await fetch(JSON_FILES[subj]);
-            if (!response.ok) {
-              debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
-              continue;
-            }
-            const questions = await response.json();
-            allQuestions.push(...questions.filter(isValidQuestion));
-          } catch (err) {
-            debug(`Error fetching ${subj} questions:`, err);
+          const response = await fetch(JSON_FILES[subj]);
+          if (!response.ok) {
+            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
             continue;
           }
+          const questions = await response.json();
+          allQuestions.push(...questions);
         }
         return allQuestions;
       }
     } catch (err) {
       debug('Error fetching questions:', err);
-      throw new Error('Failed to fetch questions.');
+      throw err;
     }
   };
-
-  const getUniqueChapters = (questions: Question[]) => {
-    const chapters = new Set(questions.map((q: Question) => q.chapter?.trim()));
+const getUniqueChapters = (questions: any[]) => {
+    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
     return Array.from(chapters).filter(ch => ch).sort();
   };
 
@@ -384,10 +384,9 @@ const quizes = () => async (ctx: Context) => {
       }
     } catch (err) {
       debug('Error creating Telegraph page:', err);
-      throw new Error('Failed to create Telegraph page.');
+      throw err;
     }
   };
-
   const getChaptersMessage = async () => {
     try {
       const allQuestions = await fetchQuestions();
@@ -403,7 +402,7 @@ const quizes = () => async (ctx: Context) => {
       };
     } catch (err) {
       debug('Error generating chapters message:', err);
-      throw new Error('Failed to generate chapters message.');
+      throw err;
     }
   };
 
@@ -426,7 +425,7 @@ const quizes = () => async (ctx: Context) => {
       }
 
       const filteredByChapter = allQuestions.filter(
-        (q: Question) => q.chapter?.trim() === matchedChapter
+        (q: any) => q.chapter?.trim() === matchedChapter
       );
 
       if (!filteredByChapter.length) {
@@ -444,7 +443,6 @@ const quizes = () => async (ctx: Context) => {
           `(If this isn't correct, please try again with a more specific chapter name)`
         );
       }
-
       const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
 
@@ -458,39 +456,28 @@ const quizes = () => async (ctx: Context) => {
           question.options.A,
           question.options.B,
           question.options.C,
-          question.options.D,
+          question.options.D
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-        try {
-          if (question.image) {
-            await ctx.replyWithPhoto({ url: question.image });
-          }
-        } catch (photoErr) {
-          debug(`Error sending photo for question: ${question.question}`, photoErr);
-          await ctx.reply('Failed to send question image, proceeding with question text.');
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
         }
 
-        try {
-          await ctx.sendPoll(
-            question.question,
-            options,
-            {
-              type: 'quiz',
-              correct_option_id: correctOptionIndex,
-              is_anonymous: false,
-              explanation: question.explanation || 'No explanation provided.',
-            } as any
-          );
-          debug(`Sent question: ${question.question}`);
-        } catch (pollErr) {
-          debug(`Error sending poll for question: ${question.question}`, pollErr);
-          await ctx.reply('Failed to send the quiz poll.');
-        }
+        await ctx.sendPoll(
+          question.question,
+          options,
+          {
+            type: 'quiz',
+            correct_option_id: correctOptionIndex,
+            is_anonymous: false,
+            explanation: question.explanation || 'No explanation provided.',
+          } as any
+        );
       }
     } catch (err) {
       debug('Error fetching questions:', err);
-      await ctx.reply('Failed to load questions. Please try again later.');
+      await ctx.reply('Oops! Failed to load questions.');
     }
     return;
   }
@@ -505,7 +492,6 @@ const quizes = () => async (ctx: Context) => {
       c: 'chemistry',
       p: 'physics',
     };
-
     let subject: string | null = null;
     let isMixed = false;
 
@@ -521,7 +507,7 @@ const quizes = () => async (ctx: Context) => {
       const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
 
       if (!filtered.length) {
-        await ctx.reply(`No valid questions available for ${subject || 'the selected subjects'}.`);
+        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
         return;
       }
 
@@ -533,43 +519,31 @@ const quizes = () => async (ctx: Context) => {
           question.options.A,
           question.options.B,
           question.options.C,
-          question.options.D,
+          question.options.D
         ];
         const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-        try {
-          if (question.image) {
-            await ctx.replyWithPhoto({ url: question.image });
-          }
-        } catch (photoErr) {
-          debug(`Error sending photo for question: ${question.question}`, photoErr);
-          await ctx.reply('Failed to send question image, proceeding with question text.');
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
         }
 
-        try {
-          await ctx.sendPoll(
-            question.question,
-            options,
-            {
-              type: 'quiz',
-              correct_option_id: correctOptionIndex,
-              is_anonymous: false,
-              explanation: question.explanation || 'No explanation provided.',
-            } as any
-          );
-          debug(`Sent question: ${question.question}`);
-        } catch (pollErr) {
-          debug(`Error sending poll for question: ${question.question}`, pollErr);
-          await ctx.reply('Failed to send the quiz poll.');
-        }
+        await ctx.sendPoll(
+          question.question,
+          options,
+          {
+            type: 'quiz',
+            correct_option_id: correctOptionIndex,
+            is_anonymous: false,
+            explanation: question.explanation || 'No explanation provided.',
+          } as any
+        );
       }
     } catch (err) {
       debug('Error fetching questions:', err);
-      await ctx.reply('Failed to load questions. Please try again later.');
+      await ctx.reply('Oops! Failed to load questions.');
     }
   }
 };
-
 const initializeAutoQuizzes = async (bot: any) => {
   const settingsRef = ref(db, 'groups');
   onValue(settingsRef, (snapshot) => {
@@ -591,7 +565,9 @@ const initializeAutoQuizzes = async (bot: any) => {
           },
         } as Context;
 
-        setupAutoQuiz(ctx, chatId, group.settings.quizInterval);
+        // Don't await here as it's in a callback
+        setupAutoQuiz(ctx, chatId, group.settings.quizInterval)
+          .catch(err => debug(`Error initializing auto quiz for ${chatId}:`, err));
       }
     });
   });
