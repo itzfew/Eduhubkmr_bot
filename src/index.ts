@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, ref, push, set } from './utils/firebase';
+import { db, ref, push, set, onValue, remove } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -41,6 +41,9 @@ interface PendingQuestion {
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
+
+// Object to store active quiz timers
+const quizTimers: { [key: number]: NodeJS.Timeout } = {};
 
 // --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
@@ -102,6 +105,111 @@ async function fetchChapters(subject: string): Promise<string[]> {
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
     return [];
+  }
+}
+
+// --- FETCH RANDOM QUESTION ---
+async function fetchRandomQuestion(): Promise<any> {
+  try {
+    const questionsRef = ref(db, 'questions');
+    return new Promise((resolve, reject) => {
+      onValue(
+        questionsRef,
+        (snapshot) => {
+          const questions = snapshot.val();
+          if (!questions) {
+            reject(new Error('No questions found in Firebase.'));
+            return;
+          }
+          const questionArray = Object.values(questions);
+          if (questionArray.length === 0) {
+            reject(new Error('No questions available.'));
+            return;
+          }
+          const randomQuestion = questionArray[Math.floor(Math.random() * questionArray.length)];
+          resolve(randomQuestion);
+        },
+        { onlyOnce: true }
+      );
+    });
+  } catch (error) {
+    console.error('Error fetching random question:', error);
+    throw error;
+  }
+}
+
+// --- SEND QUESTION TO CHAT ---
+async function sendQuizToChat(chatId: number) {
+  try {
+    const question = await fetchRandomQuestion();
+    if (!question) {
+      console.error('No question fetched for chat:', chatId);
+      return;
+    }
+
+    const options = Object.values(question.options);
+    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+
+    await bot.telegram.sendPoll(chatId, question.question, options, {
+      type: 'quiz',
+      correct_option_id: correctOptionIndex,
+      explanation: question.explanation,
+      is_anonymous: false,
+    });
+
+    if (question.image) {
+      await bot.telegram.sendPhoto(chatId, question.image, {
+        caption: `Image for the question: ${question.question}`,
+      });
+    }
+  } catch (error) {
+    console.error(`Failed to send quiz to chat ${chatId}:`, error);
+  }
+}
+
+// --- START QUIZ SCHEDULER ---
+async function startQuizScheduler(chatId: number) {
+  if (quizTimers[chatId]) {
+    clearInterval(quizTimers[chatId]);
+  }
+
+  // Send a quiz immediately
+  await sendQuizToChat(chatId);
+
+  // Schedule quizzes every minute
+  quizTimers[chatId] = setInterval(async () => {
+    await sendQuizToChat(chatId);
+  }, 60 * 1000); // 60 seconds
+}
+
+// --- STOP QUIZ SCHEDULER ---
+function stopQuizScheduler(chatId: number) {
+  if (quizTimers[chatId]) {
+    clearInterval(quizTimers[chatId]);
+    delete quizTimers[chatId];
+  }
+}
+
+// --- LOAD QUIZ SETTINGS ON STARTUP ---
+async function loadQuizSettings() {
+  try {
+    const settingsRef = ref(db, 'quizSettings');
+    onValue(
+      settingsRef,
+      (snapshot) => {
+        const settings = snapshot.val();
+        if (settings) {
+          Object.keys(settings).forEach((chatId) => {
+            if (settings[chatId].enabled) {
+              startQuizScheduler(Number(chatId));
+            }
+          });
+        }
+      },
+      { onlyOnce: true }
+    );
+  } catch (error) {
+    console.error('Error loading quiz settings:', error);
   }
 }
 
@@ -270,6 +378,78 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
                     (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
   await ctx.reply(replyText, { parse_mode: 'Markdown' });
+});
+
+// New /setquiz command
+bot.command('setquiz', async (ctx) => {
+  const chatId = ctx.chat.id;
+  const args = ctx.message.text?.split(' ').slice(1);
+  const interval = args && args.length > 0 ? parseInt(args[0], 10) : 1;
+
+  if (isNaN(interval) || interval !== 1) {
+    return ctx.reply('Usage: /setquiz 1\nCurrently, only 1-minute intervals are supported.');
+  }
+
+  // Check if user is admin in group or private chat
+  if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
+    try {
+      const admins = await ctx.getChatAdministrators();
+      const isAdmin = admins.some((admin) => admin.user.id === ctx.from?.id);
+      if (!isAdmin) {
+        return ctx.reply('Only group admins can use this command.');
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return ctx.reply('Error checking admin status.');
+    }
+  }
+
+  try {
+    // Save quiz setting to Firebase
+    const settingRef = ref(db, `quizSettings/${chatId}`);
+    await set(settingRef, { enabled: true, interval: 1 });
+
+    // Start quiz scheduler
+    await startQuizScheduler(chatId);
+
+    await ctx.reply('✅ Quiz set to send a random question every minute.');
+  } catch (error) {
+    console.error('Error setting quiz:', error);
+    await ctx.reply('❌ Error: Unable to set quiz schedule.');
+  }
+});
+
+// New /unset command
+bot.command('unset', async (ctx) => {
+  const chatId = ctx.chat.id;
+
+  // Check if user is admin in group or private chat
+  if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
+    try {
+      const admins = await ctx.getChatAdministrators();
+      const isAdmin = admins.some((admin) => admin.user.id === ctx.from?.id);
+      if (!isAdmin) {
+        return ctx.reply('Only group admins can use this command.');
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return ctx.reply('Error checking admin status.');
+    }
+  }
+
+  try {
+    // Remove quiz setting from Firebase
+    const settingRef = ref(db, `quizSettings/${chatId}`);
+    await remove(settingRef);
+
+    // Stop quiz scheduler
+    stopQuizScheduler(chatId);
+
+    await ctx.reply('✅ Quiz schedule unset. No more automatic quizzes will be sent.');
+  } catch (error) {
+    console.error('Error unsetting quiz:', error);
+    await ctx.reply('❌ Error: Unable to unset quiz schedule.');
+  }
 });
 
 // User greeting and message handling
@@ -498,6 +678,9 @@ bot.on('message', async (ctx) => {
     await greeting()(ctx);
   }
 });
+
+// Load quiz settings on bot startup
+loadQuizSettings();
 
 // --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
