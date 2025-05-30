@@ -45,6 +45,9 @@ const pendingSubmissions: { [key: number]: PendingQuestion } = {};
 // Object to store active quiz timers
 const quizTimers: { [key: number]: NodeJS.Timeout } = {};
 
+// List of subjects to fetch questions from
+const SUBJECTS = ['biology', 'physics', 'chemistry']; // Add more subjects as needed
+
 // --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
   try {
@@ -108,30 +111,80 @@ async function fetchChapters(subject: string): Promise<string[]> {
   }
 }
 
+// --- FETCH QUESTIONS FROM GITHUB ---
+async function fetchQuestionsFromGitHub(subject: string): Promise<any[]> {
+  const subjectFile = subject.toLowerCase();
+  const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    console.error(`Error fetching questions for ${subject}:`, error);
+    return [];
+  }
+}
+
+// --- CACHE QUESTIONS TO FIREBASE ---
+async function cacheQuestionsToFirebase(questions: any[], subject: string) {
+  try {
+    const questionsRef = ref(db, `questions/${subject}`);
+    for (const question of questions) {
+      const newQuestionRef = push(questionsRef);
+      await set(newQuestionRef, {
+        subject,
+        chapter: question.chapter || 'Unknown',
+        question: question.question,
+        options: question.options || { A: '', B: '', C: '', D: '' },
+        correct_option: question.correct_option || 'A',
+        explanation: question.explanation || '',
+        image: question.image || '',
+      });
+    }
+    console.log(`Cached ${questions.length} questions for ${subject} to Firebase`);
+  } catch (error) {
+    console.error(`Failed to cache questions for ${subject} to Firebase:`, error);
+  }
+}
+
 // --- FETCH RANDOM QUESTION ---
 async function fetchRandomQuestion(): Promise<any> {
   try {
+    // Try fetching from Firebase first
     const questionsRef = ref(db, 'questions');
-    return new Promise((resolve, reject) => {
-      onValue(
-        questionsRef,
-        (snapshot) => {
-          const questions = snapshot.val();
-          if (!questions) {
-            reject(new Error('No questions found in Firebase.'));
-            return;
-          }
-          const questionArray = Object.values(questions);
-          if (questionArray.length === 0) {
-            reject(new Error('No questions available.'));
-            return;
-          }
-          const randomQuestion = questionArray[Math.floor(Math.random() * questionArray.length)];
-          resolve(randomQuestion);
-        },
-        { onlyOnce: true }
-      );
-    });
+    const snapshot = await new Promise((resolve) => {
+      onValue(questionsRef, resolve, { onlyOnce: true });
+    }) as any;
+    let questions: any[] = [];
+    
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      Object.keys(data).forEach((subject) => {
+        questions = questions.concat(Object.values(data[subject]));
+      });
+    }
+
+    // If no questions in Firebase, fetch from GitHub
+    if (questions.length === 0) {
+      console.log('No questions in Firebase, fetching from GitHub...');
+      for (const subject of SUBJECTS) {
+        const githubQuestions = await fetchQuestionsFromGitHub(subject);
+        if (githubQuestions.length > 0) {
+          questions = questions.concat(githubQuestions);
+          // Cache to Firebase for future use
+          await cacheQuestionsToFirebase(githubQuestions, subject);
+        }
+      }
+    }
+
+    if (questions.length === 0) {
+      throw new Error('No questions available from GitHub or Firebase.');
+    }
+
+    // Select a random question
+    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+    return randomQuestion;
   } catch (error) {
     console.error('Error fetching random question:', error);
     throw error;
@@ -164,6 +217,8 @@ async function sendQuizToChat(chatId: number) {
     }
   } catch (error) {
     console.error(`Failed to send quiz to chat ${chatId}:`, error);
+    // Notify chat about the error
+    await bot.telegram.sendMessage(chatId, '⚠️ Unable to send quiz at this time. Please try again later.');
   }
 }
 
@@ -595,7 +650,7 @@ bot.on('message', async (ctx) => {
     } else {
       // Save all questions to Firebase
       try {
-        const questionsRef = ref(db, 'questions');
+        const questionsRef = ref(db, `questions/${submission.subject}`);
         for (const q of submission.questions) {
           const newQuestionRef = push(questionsRef);
           await set(newQuestionRef, q);
