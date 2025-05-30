@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, ref, push, set, onValue, remove } from './utils/firebase';
+import { db, ref, push, set } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -41,14 +41,6 @@ interface PendingQuestion {
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
-
-// Store quiz schedules
-interface QuizSchedule {
-  chatId: number;
-  intervalId: NodeJS.Timeout;
-}
-
-const quizSchedules: { [key: number]: QuizSchedule } = {};
 
 // --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
@@ -110,91 +102,6 @@ async function fetchChapters(subject: string): Promise<string[]> {
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
     return [];
-  }
-}
-
-// --- FETCH RANDOM QUESTION ---
-async function fetchRandomQuestion(subject: string) {
-  const subjectFile = subject.toLowerCase();
-  const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
-    const data = await res.json();
-    const randomIndex = Math.floor(Math.random() * data.length);
-    return data[randomIndex];
-  } catch (error) {
-    console.error(`Error fetching random question for ${subject}:`, error);
-    return null;
-  }
-}
-
-// --- SEND QUIZ QUESTION ---
-async function sendQuizQuestion(ctx: Context, chatId: number, question: any) {
-  try {
-    const options = Object.values(question.options);
-    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-
-    await ctx.telegram.sendPoll(
-      chatId,
-      question.question,
-      options,
-      {
-        is_anonymous: false,
-        type: 'quiz',
-        correct_option_id: correctOptionIndex,
-        explanation: question.explanation,
-      }
-    );
-
-    if (question.image) {
-      await ctx.telegram.sendPhoto(chatId, question.image, { caption: `Image for the above question` });
-    }
-  } catch (error) {
-    console.error(`Failed to send quiz to chat ${chatId}:`, error);
-  }
-}
-
-// --- LOAD QUIZ SCHEDULES FROM FIREBASE ---
-async function loadQuizSchedules() {
-  const schedulesRef = ref(db, 'quizSchedules');
-  onValue(schedulesRef, async (snapshot) => {
-    const schedules = snapshot.val();
-    if (!schedules) return;
-
-    for (const chatIdStr in schedules) {
-      const chatId = parseInt(chatIdStr, 10);
-      if (!quizSchedules[chatId]) {
-        const subjects = schedules[chatIdStr].subjects || ['biology', 'physics', 'chemistry'];
-        startQuizSchedule(chatId, subjects);
-      }
-    }
-  }, (error) => {
-    console.error('Error loading quiz schedules:', error);
-  });
-}
-
-// --- START QUIZ SCHEDULE ---
-function startQuizSchedule(chatId: number, subjects: string[]) {
-  const intervalId = setInterval(async () => {
-    const subject = subjects[Math.floor(Math.random() * subjects.length)];
-    const question = await fetchRandomQuestion(subject);
-    if (question) {
-      const ctx = bot as any; // Create a context-like object for sending messages
-      ctx.chat = { id: chatId };
-      ctx.telegram = bot.telegram;
-      await sendQuizQuestion(ctx, chatId, question);
-    }
-  }, 60 * 1000); // Every minute
-
-  quizSchedules[chatId] = { chatId, intervalId };
-}
-
-// --- STOP QUIZ SCHEDULE ---
-function stopQuizSchedule(chatId: number) {
-  if (quizSchedules[chatId]) {
-    clearInterval(quizSchedules[chatId].intervalId);
-    delete quizSchedules[chatId];
   }
 }
 
@@ -363,67 +270,6 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
                     (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
   await ctx.reply(replyText, { parse_mode: 'Markdown' });
-});
-
-// Set quiz schedule command
-bot.command('setquiz', async (ctx) => {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
-
-  // Check if user is admin in group or private chat
-  if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
-    const admins = await ctx.getChatAdministrators();
-    const isAdmin = admins.some(admin => admin.user.id === ctx.from?.id);
-    if (!isAdmin) {
-      return ctx.reply('Only group admins can use this command.');
-    }
-  }
-
-  const parts = ctx.message.text?.split(' ');
-  const count = parts && parts.length > 1 ? parseInt(parts[1], 10) : 1;
-  if (isNaN(count) || count !== 1) {
-    return ctx.reply('Currently, only one quiz per minute is supported. Use /setquiz 1');
-  }
-
-  // Default subjects
-  const subjects = ['biology', 'physics', 'chemistry'];
-
-  // Save to Firebase
-  try {
-    const scheduleRef = ref(db, `quizSchedules/${chatId}`);
-    await set(scheduleRef, { subjects, enabled: true });
-    startQuizSchedule(chatId, subjects);
-    await ctx.reply('Quiz schedule set! A random question will be sent every minute.');
-  } catch (error) {
-    console.error('Failed to save quiz schedule:', error);
-    await ctx.reply('❌ Error: Unable to set quiz schedule.');
-  }
-});
-
-// Unset quiz schedule command
-bot.command('unset', async (ctx) => {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return;
-
-  // Check if user is admin in group or private chat
-  if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
-    const admins = await ctx.getChatAdministrators();
-    const isAdmin = admins.some(admin => admin.user.id === ctx.from?.id);
-    if (!isAdmin) {
-      return ctx.reply('Only group admins can use this command.');
-    }
-  }
-
-  // Remove from Firebase and stop schedule
-  try {
-    const scheduleRef = ref(db, `quizSchedules/${chatId}`);
-    await remove(scheduleRef);
-    stopQuizSchedule(chatId);
-    await ctx.reply('Quiz schedule unset. No more automatic quizzes will be sent.');
-  } catch (error) {
-    console.error('Failed to unset quiz schedule:', error);
-    await ctx.reply('❌ Error: Unable to unset quiz schedule.');
-  }
 });
 
 // User greeting and message handling
@@ -652,9 +498,6 @@ bot.on('message', async (ctx) => {
     await greeting()(ctx);
   }
 });
-
-// Load existing quiz schedules on startup
-loadQuizSchedules();
 
 // --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
