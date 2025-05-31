@@ -19,7 +19,7 @@ const JSON_FILES: Record<string, string> = {
 };
 
 // List of admin user IDs (replace with your actual admin IDs or implement your own logic)
-const ADMIN_IDS = ['123456789', '987654321']; // Example Telegram user IDs
+const ADMIN_IDS = ['6930703214', '6930703214']; // Example Telegram user IDs
 
 // Function to check if the user is an admin
 const isAdmin = (ctx: Context): boolean => {
