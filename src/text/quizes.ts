@@ -192,7 +192,7 @@ const startAutoSending = async (telegram: any, chatId: string, questions: any[])
   const interval = setInterval(async () => {
     debug(`Interval triggered for chat ${chatId} at ${new Date().toISOString()}`);
     await sendRandomQuestion(telegram, chatId, questions);
-  }, 60 * 1000); // 1 minute interval
+  }, 30 * 60 * 1000); // 30 minutes interval
   intervalIds.set(chatId, interval);
 };
 
