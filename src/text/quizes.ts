@@ -5,21 +5,16 @@ import { db, ref, set, onValue, remove } from '../utils/firebase';
 
 const debug = createDebug('bot:quizes');
 
-// In-memory cache for super-admins (loaded from Firebase)
+let accessToken: string | null = null;
 let superAdmins: string[] = [];
+const intervalIds: Map<string, NodeJS.Timeout> = new Map();
 
-// Base URL for JSON files
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
-
-// Subject-specific JSON file paths
 const JSON_FILES: Record<string, string> = {
   biology: `${BASE_URL}biology.json`,
   chemistry: `${BASE_URL}chemistry.json`,
   physics: `${BASE_URL}physics.json`,
 };
-
-// Map to store active intervals for each chat
-const intervalIds: Map<string, NodeJS.Timeout> = new Map();
 
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
@@ -66,14 +61,11 @@ const findBestMatchingChapter = (chapters: string[], query: string): string | nu
 const isAdmin = async (ctx: Context): Promise<boolean> => {
   if (!ctx.from || !ctx.chat) return false;
   const userId = ctx.from.id.toString();
-  const chatId = ctx.chat.id.toString();
 
-  // Check if user is a super-admin
   if (superAdmins.includes(userId)) {
     return true;
   }
 
-  // Check if user is a group admin
   try {
     const chatMember = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
     return ['administrator', 'creator'].includes(chatMember.status);
@@ -83,7 +75,7 @@ const isAdmin = async (ctx: Context): Promise<boolean> => {
   }
 };
 
-// Load super-admins from Firebase on startup
+// Load super-admins from Firebase
 const loadSuperAdmins = async () => {
   try {
     const superAdminsRef = ref(db, 'super_admins');
@@ -97,60 +89,40 @@ const loadSuperAdmins = async () => {
   }
 };
 
-// Load active settime groups from Firebase and start timers
-const loadSetTimeGroups = async (ctx: Context) => {
+// Fetch questions for a specific subject or all subjects
+const fetchQuestions = async (subject?: string): Promise<any[]> => {
   try {
-    const setTimeRef = ref(db, 'settime_groups');
-    onValue(setTimeRef, async (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const chatIds = Object.keys(data);
-        for (const chatId of chatIds) {
-          if (!intervalIds.has(chatId)) {
-            const questions = await fetchQuestions();
-            startAutoSending(ctx, chatId, questions);
-          }
-        }
+    if (subject) {
+      const response = await fetch(JSON_FILES[subject]);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
       }
-    });
-  } catch (err) {
-    debug('Error loading settime groups:', err);
-  }
-};
-
-// Function to start auto-sending questions for a chat
-const startAutoSending = (ctx: Context, chatId: string, questions: any[]) => {
-  if (!questions.length) {
-    ctx.telegram.sendMessage(chatId, 'No questions available for auto-sending.');
-    return;
-  }
-
-  const interval = setInterval(async () => {
-    await sendRandomQuestion(ctx, chatId, questions);
-  }, 60 * 1000); // 1 minute interval
-  intervalIds.set(chatId, interval);
-};
-
-// Function to stop auto-sending for a chat
-const stopAutoSending = async (chatId: string) => {
-  const interval = intervalIds.get(chatId);
-  if (interval) {
-    clearInterval(interval);
-    intervalIds.delete(chatId);
-    try {
-      await remove(ref(db, `settime_groups/${chatId}`));
-      debug(`Stopped auto-sending for chat ${chatId}`);
-    } catch (err) {
-      debug('Error removing settime group from Firebase:', err);
+      return await response.json();
+    } else {
+      const subjects = Object.keys(JSON_FILES);
+      const allQuestions: any[] = [];
+      for (const subj of subjects) {
+        const response = await fetch(JSON_FILES[subj]);
+        if (!response.ok) {
+          debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
+          continue;
+        }
+        const questions = await response.json();
+        allQuestions.push(...questions);
+      }
+      return allQuestions;
     }
+  } catch (err) {
+    debug('Error fetching questions:', err);
+    throw err;
   }
 };
 
-// Function to send a single random question
-const sendRandomQuestion = async (ctx: Context, chatId: string, questions: any[]) => {
+// Send a single random question
+const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[]) => {
   try {
     if (!questions.length) {
-      await ctx.telegram.sendMessage(chatId, 'No questions available.');
+      await telegram.sendMessage(chatId, 'No questions available.');
       return;
     }
 
@@ -166,10 +138,10 @@ const sendRandomQuestion = async (ctx: Context, chatId: string, questions: any[]
     const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
     if (question.image) {
-      await ctx.telegram.sendPhoto(chatId, { url: question.image });
+      await telegram.sendPhoto(chatId, { url: question.image });
     }
 
-    await ctx.telegram.sendPoll(
+    await telegram.sendPoll(
       chatId,
       question.question,
       options,
@@ -182,7 +154,62 @@ const sendRandomQuestion = async (ctx: Context, chatId: string, questions: any[]
     );
   } catch (err) {
     debug('Error sending random question:', err);
-    await ctx.telegram.sendMessage(chatId, 'Oops! Failed to send a question.');
+    await telegram.sendMessage(chatId, 'Oops! Failed to send a question.');
+  }
+};
+
+// Start auto-sending questions for a chat
+const startAutoSending = async (telegram: any, chatId: string, questions: any[]) => {
+  if (!questions.length) {
+    await telegram.sendMessage(chatId, 'No questions available for auto-sending.');
+    return;
+  }
+
+  const interval = setInterval(async () => {
+    await sendRandomQuestion(telegram, chatId, questions);
+  }, 60 * 1000); // 1 minute interval
+  intervalIds.set(chatId, interval);
+};
+
+// Stop auto-sending for a chat
+const stopAutoSending = async (chatId: string) => {
+  const interval = intervalIds.get(chatId);
+  if (interval) {
+    clearInterval(interval);
+    intervalIds.delete(chatId);
+    try {
+      await remove(ref(db, `settime_groups/${chatId}`));
+      debug(`Stopped auto-sending for chat ${chatId}`);
+    } catch (err) {
+      debug('Error removing settime group from Firebase:', err);
+    }
+  }
+};
+
+// Load active settime groups from Firebase
+const loadSetTimeGroups = async (telegram: any) => {
+  try {
+    const setTimeRef = ref(db, 'settime_groups');
+    onValue(setTimeRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const chatIds = Object.keys(data);
+        for (const chatId of chatIds) {
+          if (!intervalIds.has(chatId)) {
+            try {
+              const questions = await fetchQuestions();
+              await startAutoSending(telegram, chatId, questions);
+              debug(`Started auto-sending for chat ${chatId}`);
+            } catch (err) {
+              debug(`Error starting auto-sending for chat ${chatId}:`, err);
+              await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
+            }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    debug('Error loading settime groups:', err);
   }
 };
 
@@ -192,7 +219,7 @@ const quizes = () => async (ctx: Context) => {
   // Initialize Firebase data on first run
   if (!superAdmins.length) {
     await loadSuperAdmins();
-    await loadSetTimeGroups(ctx);
+    await loadSetTimeGroups(ctx.telegram);
   }
 
   if (!ctx.message || !('text' in ctx.message) || !ctx.chat) return;
@@ -224,35 +251,6 @@ const quizes = () => async (ctx: Context) => {
       }
     } catch (err) {
       debug('Error creating Telegraph account:', err);
-      throw err;
-    }
-  };
-
-  // Function to fetch questions for a specific subject or all subjects
-  const fetchQuestions = async (subject?: string): Promise<any[]> => {
-    try {
-      if (subject) {
-        const response = await fetch(JSON_FILES[subject]);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
-        }
-        return await response.json();
-      } else {
-        const subjects = Object.keys(JSON_FILES);
-        const allQuestions: any[] = [];
-        for (const subj of subjects) {
-          const response = await fetch(JSON_FILES[subj]);
-          if (!response.ok) {
-            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
-            continue;
-          }
-          const questions = await response.json();
-          allQuestions.push(...questions);
-        }
-        return allQuestions;
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
       throw err;
     }
   };
@@ -364,9 +362,8 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // Save chat ID to Firebase
       await set(ref(db, `settime_groups/${chatId}`), true);
-      startAutoSending(ctx, chatId, questions);
+      await startAutoSending(ctx.telegram, chatId, questions);
       await ctx.reply('⏰ Started sending a random question every minute in this chat.');
     } catch (err) {
       debug('Error setting up automatic question sending:', err);
