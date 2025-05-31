@@ -8,6 +8,8 @@ const debug = createDebug('bot:quizes');
 let accessToken: string | null = null;
 let superAdmins: string[] = [];
 const intervalIds: Map<string, NodeJS.Timeout> = new Map();
+let lastFirebaseUpdate: number = 0; // To debounce Firebase onValue calls
+const DEBOUNCE_MS = 1000; // Debounce Firebase updates by 1 second
 
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
 const JSON_FILES: Record<string, string> = {
@@ -181,16 +183,16 @@ const startAutoSending = async (telegram: any, chatId: string, questions: any[])
   }
 
   if (intervalIds.has(chatId)) {
-    debug(`Interval already exists for chat ${chatId}, skipping`);
-    return;
+    debug(`Interval already exists for chat ${chatId}, clearing existing`);
+    clearInterval(intervalIds.get(chatId));
+    intervalIds.delete(chatId);
   }
 
   debug(`Starting auto-sending for chat ${chatId} with ${questions.length} questions`);
-  await sendRandomQuestion(telegram, chatId, questions); // Send first question immediately
   const interval = setInterval(async () => {
-    debug(`Interval triggered for chat ${chatId}`);
+    debug(`Interval triggered for chat ${chatId} at ${new Date().toISOString()}`);
     await sendRandomQuestion(telegram, chatId, questions);
-  }, 30 * 60 * 1000); // 30 minute interval
+  }, 60 * 1000); // 1 minute interval
   intervalIds.set(chatId, interval);
 };
 
@@ -210,6 +212,7 @@ const stopAutoSending = async (telegram: any, chatId: string) => {
     }
   } else {
     debug(`No interval found for chat ${chatId}`);
+    await telegram.sendMessage(chatId, '⏰ No active auto-sending found for this chat.');
   }
 };
 
@@ -219,28 +222,46 @@ const loadSetTimeGroups = async (telegram: any) => {
     debug('Loading settime groups from Firebase');
     const setTimeRef = ref(db, 'settime_groups');
     onValue(setTimeRef, async (snapshot) => {
+      const now = Date.now();
+      if (now - lastFirebaseUpdate < DEBOUNCE_MS) {
+        debug('Debouncing Firebase update');
+        return;
+      }
+      lastFirebaseUpdate = now;
+
       debug('settime_groups snapshot received');
       const data = snapshot.val();
       if (data) {
         const chatIds = Object.keys(data);
         debug(`Found ${chatIds.length} active settime groups: ${chatIds}`);
+
+        // Stop all existing intervals to prevent duplicates
+        for (const [chatId, interval] of intervalIds) {
+          debug(`Clearing existing interval for chat ${chatId}`);
+          clearInterval(interval);
+          intervalIds.delete(chatId);
+        }
+
+        // Start new intervals for active chats
         for (const chatId of chatIds) {
-          if (!intervalIds.has(chatId)) {
-            try {
-              debug(`Fetching questions for chat ${chatId}`);
-              const questions = await fetchQuestions();
-              debug(`Starting auto-sending for chat ${chatId}`);
-              await startAutoSending(telegram, chatId, questions);
-            } catch (err) {
-              debug(`Error starting auto-sending for chat ${chatId}:`, err);
-              await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
-            }
-          } else {
-            debug(`Auto-sending already active for chat ${chatId}`);
+          try {
+            debug(`Fetching questions for chat ${chatId}`);
+            const questions = await fetchQuestions();
+            debug(`Starting auto-sending for chat ${chatId}`);
+            await startAutoSending(telegram, chatId, questions);
+          } catch (err) {
+            debug(`Error starting auto-sending for chat ${chatId}:`, err);
+            await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
           }
         }
       } else {
-        debug('No settime groups found in Firebase');
+        debug('No settime groups found in Firebase, clearing all intervals');
+        // Clear all intervals if no active chats
+        for (const [chatId, interval] of intervalIds) {
+          clearInterval(interval);
+          intervalIds.delete(chatId);
+          await telegram.sendMessage(chatId, '⏰ Auto-sending stopped due to no active chats in Firebase.');
+        }
       }
     }, { onlyOnce: false });
   } catch (err) {
@@ -258,10 +279,7 @@ const quizes = () => async (ctx: Context) => {
     await loadSetTimeGroups(ctx.telegram);
   }
 
-  if (!ctx.message || !('text' in ctx.message) || !ctx.chat) {
-    debug('Invalid message or chat context');
-    return;
-  }
+  if (!ctx.message || !('text' in ctx.message) || !ctx.chat) return;
 
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
@@ -407,7 +425,7 @@ const quizes = () => async (ctx: Context) => {
 
       await set(ref(db, `settime_groups/${chatId}`), true);
       await startAutoSending(ctx.telegram, chatId, questions);
-      await ctx.reply('⏰ Started sending a random question every 30 minutes in this chat.');
+      await ctx.reply('⏰ Started sending a random question every minute in this chat.');
     } catch (err) {
       debug('Error setting up automatic question sending:', err);
       await ctx.reply('Oops! Failed to set up automatic question sending.');
@@ -423,11 +441,6 @@ const quizes = () => async (ctx: Context) => {
     }
 
     const chatId = ctx.chat.id.toString();
-    if (!intervalIds.has(chatId)) {
-      await ctx.reply('⏰ Automatic question sending is not active in this chat.');
-      return;
-    }
-
     await stopAutoSending(ctx.telegram, chatId);
     return;
   }
@@ -435,7 +448,7 @@ const quizes = () => async (ctx: Context) => {
   // Handle /chapter command
   if (chapterMatch) {
     const chapterQuery = chapterMatch[1].trim();
-    const count = chapterMatchSpellCheckerBot: [2] ? parseInt(chapterMatch[2], 10) : 1;
+    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
 
     try {
       const allQuestions = await fetchQuestions();
@@ -449,135 +462,130 @@ const quizes = () => async (ctx: Context) => {
           `❌ No matching chapter found for "<b>${chapterQuery}</b>"\n\n${message}`
         );
         return;
-    }
-
-    const filteredByChapter = allQuestions.filter(
-      (q: any) => q.chapter?.trim() === matchedChapter
-    );
-
-    if (!filteredByChapter.length) {
-      const { message } = await getChaptersMessage();
-      await ctx.replyWithHTML(
-        `❌ No questions found for chapter "<b>${matchedChapter}</b>"\n\n${message}`
-      );
-      return;
-    }
-
-    if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
-      await ctx.replyWithHTML(
-        `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
-        `Sending questions from this chapter...\n` +
-        `(If this isn't correct, please try again with a more specific chapter name)`
-      );
-    }
-
-    const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
-
-    if (!selected.length) {
-      await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
-      return;
-    }
-
-    for (const question of selected) {
-      const options = [
-        question.options.A,
-        question.options.B,
-        question.options.C,
-        question.options.D
-      ];
-      const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-      
-      if (question.image) {
-        await ctx.replyWithPhoto({ url: question.image });
       }
-      
-      await ctx.sendPoll(
-        question.question,
-        options,
-        {
-          type: 'quiz',
-          correct_option_id: correctOptionIndex,
-          is_anonymous: false,
-          explanation: question.explanation || 'No explanation provided.',
-        } as any
+
+      const filteredByChapter = allQuestions.filter(
+        (q: any) => q.chapter?.trim() === matchedChapter
       );
+
+      if (!filteredByChapter.length) {
+        const { message } = await getChaptersMessage();
+        await ctx.replyWithHTML(
+          `❌ No questions found for chapter "<b>${matchedChapter}</b>"\n\n${message}`
+        );
+        return;
+      }
+
+      if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
+        await ctx.replyWithHTML(
+          `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
+          `Sending questions from this chapter...\n` +
+          `(If this isn't correct, please try again with a more specific chapter name)`
+        );
+      }
+
+      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
+
+      if (!selected.length) {
+        await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
+        return;
+      }
+
+      for (const question of selected) {
+        const options = [
+          question.options.A,
+          question.options.B,
+          question.options.C,
+          question.options.D
+        ];
+        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+        
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
+        }
+        
+        await ctx.sendPoll(
+          question.question,
+          options,
+          {
+            type: 'quiz',
+            correct_option_id: correctOptionIndex,
+            is_anonymous: false,
+            explanation: question.explanation || 'No explanation provided.',
+          } as any
+        );
+      }
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      await ctx.reply('Oops! Failed to load questions.');
     }
-  } catch (err) {
-    debug('Error fetching questions:', err);
-    await ctx.reply('Oops! Failed to load questions.');
-  }
-  return;
-}
-
-// Handle /pyq, /b1, /c1, /p1 commands
-if (cmdMatch) {
-  const cmd = cmdMatch[1];
-  const subjectCode = cmdMatch[2];
-  const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
-
-  const subjectMap: Record<string, string> = {
-    b: 'biology',
-    c: 'chemistry',
-    p: 'physics',
-  };
-  
-  let subject: string | null = null;
-  let isMixed = false;
-  
-  if (cmd === 'pyq') {
-    isMixed = true;
-  } else if (subjectCode) {
-    subject = subjectMap[subjectCode];
-  } else if (['b1', 'c1', 'p1'].includes(cmd)) {
-    subject = subjectMap[cmd[0]];
+    return;
   }
 
-  try {
-    const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
+  // Handle /pyq, /b1, /c1, /p1 commands
+  if (cmdMatch) {
+    const cmd = cmdMatch[1];
+    const subjectCode = cmdMatch[2];
+    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
+
+    const subjectMap: Record<string, string> = {
+      b: 'biology',
+      c: 'chemistry',
+      p: 'physics',
+    };
     
-    if (!filtered.length) {
-      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
-      return;
+    let subject: string | null = null;
+    let isMixed = false;
+    
+    if (cmd === 'pyq') {
+      isMixed = true;
+    } else if (subjectCode) {
+      subject = subjectMap[subjectCode];
+    } else if (['b1', 'c1', 'p1'].includes(cmd)) {
+      subject = subjectMap[cmd[0]];
     }
 
-    const shuffled = filtered.sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, Math.min(count, filtered.length));
-
-    for (const question of selected) {
-      const options = [
-        question.options.A,
-        question.options.B,
-        question.options.C,
-        question.options.D
-      ];
-      const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+    try {
+      const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
       
-      if (question.image) {
-        await ctx.replyWithPhoto({ url: question.image });
+      if (!filtered.length) {
+        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+        return;
       }
-      
-      await ctx.sendPoll(
-        question.question,
-        options,
-        {
-          type: 'quiz',
-          correct_option_id: correctOptionIndex,
-          is_anonymous: false,
-          explanation: question.explanation || 'No explanation provided.',
-        } as any
-      );
-    }
-  } catch (err) {
-    debug('Error fetching questions:', err);
-    await ctx.reply('Oops! Failed to load questions.');
-  }
-  return;
-}
 
-// Fallback for non-command messages
-debug(`Ignoring non-command message: ${text}`);
-await ctx.reply('Please use a valid command like /chapter, /pyq, /b1, /c1, /p1, /settime, or /stoptime.');
+      const shuffled = filtered.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(count, filtered.length));
+
+      for (const question of selected) {
+        const options = [
+          question.options.A,
+          question.options.B,
+          question.options.C,
+          question.options.D
+        ];
+        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+        
+        if (question.image) {
+          await ctx.replyWithPhoto({ url: question.image });
+        }
+        
+        await ctx.sendPoll(
+          question.question,
+          options,
+          {
+            type: 'quiz',
+            correct_option_id: correctOptionIndex,
+            is_anonymous: false,
+            explanation: question.explanation || 'No explanation provided.',
+          } as any
+        );
+      }
+    } catch (err) {
+      debug('Error fetching questions:', err);
+      await ctx.reply('Oops! Failed to load questions.');
+    }
+  }
 };
 
-module.exports = { quizes };
+export { quizes };
