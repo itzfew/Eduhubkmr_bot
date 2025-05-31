@@ -5,6 +5,8 @@ import { distance } from 'fastest-levenshtein';
 const debug = createDebug('bot:quizes');
 
 let accessToken: string | null = null;
+let intervalId: NodeJS.Timeout | null = null; // To store the interval ID for automatic question sending
+let isAutoSending = false; // Flag to track if auto-sending is active
 
 // Base URL for JSON files
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
@@ -14,6 +16,15 @@ const JSON_FILES: Record<string, string> = {
   biology: `${BASE_URL}biology.json`,
   chemistry: `${BASE_URL}chemistry.json`,
   physics: `${BASE_URL}physics.json`,
+};
+
+// List of admin user IDs (replace with your actual admin IDs or implement your own logic)
+const ADMIN_IDS = ['123456789', '987654321']; // Example Telegram user IDs
+
+// Function to check if the user is an admin
+const isAdmin = (ctx: Context): boolean => {
+  if (!ctx.from) return false;
+  return ADMIN_IDS.includes(ctx.from.id.toString());
 };
 
 // Function to calculate similarity score between two strings
@@ -69,6 +80,45 @@ const findBestMatchingChapter = (chapters: string[], query: string): string | nu
   return bestMatch;
 };
 
+// Function to send a single random question
+const sendRandomQuestion = async (ctx: Context, questions: any[]) => {
+  try {
+    if (!questions.length) {
+      await ctx.reply('No questions available.');
+      return;
+    }
+
+    const shuffled = questions.sort(() => 0.5 - Math.random());
+    const question = shuffled[0];
+
+    const options = [
+      question.options.A,
+      question.options.B,
+      question.options.C,
+      question.options.D,
+    ];
+    const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+
+    if (question.image) {
+      await ctx.replyWithPhoto({ url: question.image });
+    }
+
+    await ctx.sendPoll(
+      question.question,
+      options,
+      {
+        type: 'quiz',
+        correct_option_id: correctOptionIndex,
+        is_anonymous: false,
+        explanation: question.explanation || 'No explanation provided.',
+      } as any
+    );
+  } catch (err) {
+    debug('Error sending random question:', err);
+    await ctx.reply('Oops! Failed to send a question.');
+  }
+};
+
 const quizes = () => async (ctx: Context) => {
   debug('Triggered "quizes" handler');
 
@@ -77,6 +127,8 @@ const quizes = () => async (ctx: Context) => {
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
   const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const setTimeMatch = text.match(/^\/settime$/);
+  const stopTimeMatch = text.match(/^\/stoptime$/);
 
   // Function to create a Telegraph account
   const createTelegraphAccount = async () => {
@@ -220,6 +272,59 @@ const quizes = () => async (ctx: Context) => {
       throw err;
     }
   };
+
+  // Handle /settime command
+  if (setTimeMatch) {
+    if (!isAdmin(ctx)) {
+      await ctx.reply('❌ You are not authorized to use this command.');
+      return;
+    }
+
+    if (isAutoSending) {
+      await ctx.reply('⏰ Automatic question sending is already active.');
+      return;
+    }
+
+    try {
+      const allQuestions = await fetchQuestions();
+      if (!allQuestions.length) {
+        await ctx.reply('No questions available to send automatically.');
+        return;
+      }
+
+      isAutoSending = true;
+      intervalId = setInterval(async () => {
+        await sendRandomQuestion(ctx, allQuestions);
+      }, 60 * 1000); // 1 minute interval
+
+      await ctx.reply('⏰ Started sending a random question every minute.');
+    } catch (err) {
+      debug('Error setting up automatic question sending:', err);
+      await ctx.reply('Oops! Failed to set up automatic question sending.');
+    }
+    return;
+  }
+
+  // Handle /stoptime command
+  if (stopTimeMatch) {
+    if (!isAdmin(ctx)) {
+      await ctx.reply('❌ You are not authorized to use this command.');
+      return;
+    }
+
+    if (!isAutoSending) {
+      await ctx.reply('⏰ Automatic question sending is not active.');
+      return;
+    }
+
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+      isAutoSending = false;
+      await ctx.reply('⏰ Stopped automatic question sending.');
+    }
+    return;
+  }
 
   // Handle /chapter command
   if (chapterMatch) {
