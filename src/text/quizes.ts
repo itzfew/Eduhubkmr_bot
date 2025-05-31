@@ -1,12 +1,12 @@
 import { Context } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
+import { db, ref, set, onValue, remove } from './utils/firebase';
 
 const debug = createDebug('bot:quizes');
 
-let accessToken: string | null = null;
-let intervalId: NodeJS.Timeout | null = null; // To store the interval ID for automatic question sending
-let isAutoSending = false; // Flag to track if auto-sending is active
+// In-memory cache for super-admins (loaded from Firebase)
+let superAdmins: string[] = [];
 
 // Base URL for JSON files
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
@@ -18,14 +18,8 @@ const JSON_FILES: Record<string, string> = {
   physics: `${BASE_URL}physics.json`,
 };
 
-// List of admin user IDs (replace with your actual admin IDs or implement your own logic)
-const ADMIN_IDS = ['6930703214', '6930703214']; // Example Telegram user IDs
-
-// Function to check if the user is an admin
-const isAdmin = (ctx: Context): boolean => {
-  if (!ctx.from) return false;
-  return ADMIN_IDS.includes(ctx.from.id.toString());
-};
+// Map to store active intervals for each chat
+const intervalIds: Map<string, NodeJS.Timeout> = new Map();
 
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
@@ -38,37 +32,26 @@ const getSimilarityScore = (a: string, b: string): number => {
 const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
   if (!query || !chapters.length) return null;
   
-  // First try exact match (case insensitive)
   const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
   if (exactMatch) return exactMatch;
 
-  // Then try contains match
   const containsMatch = chapters.find(ch => 
     ch.toLowerCase().includes(query.toLowerCase()) || 
     query.toLowerCase().includes(ch.toLowerCase())
   );
   if (containsMatch) return containsMatch;
 
-  // Then try fuzzy matching
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  
   let bestMatch: string | null = null;
-  let bestScore = 0.5; // Minimum threshold
+  let bestScore = 0.5;
 
   for (const chapter of chapters) {
     const chapterWords = chapter.toLowerCase().split(/\s+/);
-    
-    // Calculate word overlap score
     const matchingWords = queryWords.filter(qw => 
       chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
     );
-    
     const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
-    
-    // Calculate full string similarity
     const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
-    
-    // Combined score (weighted towards overlap)
     const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
     
     if (totalScore > bestScore) {
@@ -76,15 +59,98 @@ const findBestMatchingChapter = (chapters: string[], query: string): string | nu
       bestMatch = chapter;
     }
   }
-
   return bestMatch;
 };
 
+// Function to check if the user is an admin
+const isAdmin = async (ctx: Context): Promise<boolean> => {
+  if (!ctx.from || !ctx.chat) return false;
+  const userId = ctx.from.id.toString();
+  const chatId = ctx.chat.id.toString();
+
+  // Check if user is a super-admin
+  if (superAdmins.includes(userId)) {
+    return true;
+  }
+
+  // Check if user is a group admin
+  try {
+    const chatMember = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
+    return ['administrator', 'creator'].includes(chatMember.status);
+  } catch (err) {
+    debug('Error checking admin status:', err);
+    return false;
+  }
+};
+
+// Load super-admins from Firebase on startup
+const loadSuperAdmins = async () => {
+  try {
+    const superAdminsRef = ref(db, 'super_admins');
+    onValue(superAdminsRef, (snapshot) => {
+      const data = snapshot.val();
+      superAdmins = data ? Object.values(data) : [];
+      debug('Loaded super-admins:', superAdmins);
+    });
+  } catch (err) {
+    debug('Error loading super-admins:', err);
+  }
+};
+
+// Load active settime groups from Firebase and start timers
+const loadSetTimeGroups = async (ctx: Context) => {
+  try {
+    const setTimeRef = ref(db, 'settime_groups');
+    onValue(setTimeRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const chatIds = Object.keys(data);
+        for (const chatId of chatIds) {
+          if (!intervalIds.has(chatId)) {
+            const questions = await fetchQuestions();
+            startAutoSending(ctx, chatId, questions);
+          }
+        }
+      }
+    });
+  } catch (err) {
+    debug('Error loading settime groups:', err);
+  }
+};
+
+// Function to start auto-sending questions for a chat
+const startAutoSending = (ctx: Context, chatId: string, questions: any[]) => {
+  if (!questions.length) {
+    ctx.telegram.sendMessage(chatId, 'No questions available for auto-sending.');
+    return;
+  }
+
+  const interval = setInterval(async () => {
+    await sendRandomQuestion(ctx, chatId, questions);
+  }, 60 * 1000); // 1 minute interval
+  intervalIds.set(chatId, interval);
+};
+
+// Function to stop auto-sending for a chat
+const stopAutoSending = async (chatId: string) => {
+  const interval = intervalIds.get(chatId);
+  if (interval) {
+    clearInterval(interval);
+    intervalIds.delete(chatId);
+    try {
+      await remove(ref(db, `settime_groups/${chatId}`));
+      debug(`Stopped auto-sending for chat ${chatId}`);
+    } catch (err) {
+      debug('Error removing settime group from Firebase:', err);
+    }
+  }
+};
+
 // Function to send a single random question
-const sendRandomQuestion = async (ctx: Context, questions: any[]) => {
+const sendRandomQuestion = async (ctx: Context, chatId: string, questions: any[]) => {
   try {
     if (!questions.length) {
-      await ctx.reply('No questions available.');
+      await ctx.telegram.sendMessage(chatId, 'No questions available.');
       return;
     }
 
@@ -100,10 +166,11 @@ const sendRandomQuestion = async (ctx: Context, questions: any[]) => {
     const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
     if (question.image) {
-      await ctx.replyWithPhoto({ url: question.image });
+      await ctx.telegram.sendPhoto(chatId, { url: question.image });
     }
 
-    await ctx.sendPoll(
+    await ctx.telegram.sendPoll(
+      chatId,
       question.question,
       options,
       {
@@ -111,18 +178,24 @@ const sendRandomQuestion = async (ctx: Context, questions: any[]) => {
         correct_option_id: correctOptionIndex,
         is_anonymous: false,
         explanation: question.explanation || 'No explanation provided.',
-      } as any
+      }
     );
   } catch (err) {
     debug('Error sending random question:', err);
-    await ctx.reply('Oops! Failed to send a question.');
+    await ctx.telegram.sendMessage(chatId, 'Oops! Failed to send a question.');
   }
 };
 
 const quizes = () => async (ctx: Context) => {
   debug('Triggered "quizes" handler');
 
-  if (!ctx.message || !('text' in ctx.message)) return;
+  // Initialize Firebase data on first run
+  if (!superAdmins.length) {
+    await loadSuperAdmins();
+    await loadSetTimeGroups(ctx);
+  }
+
+  if (!ctx.message || !('text' in ctx.message) || !ctx.chat) return;
 
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
@@ -159,14 +232,12 @@ const quizes = () => async (ctx: Context) => {
   const fetchQuestions = async (subject?: string): Promise<any[]> => {
     try {
       if (subject) {
-        // Fetch questions for a specific subject
         const response = await fetch(JSON_FILES[subject]);
         if (!response.ok) {
           throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
         }
         return await response.json();
       } else {
-        // Fetch questions from all subjects
         const subjects = Object.keys(JSON_FILES);
         const allQuestions: any[] = [];
         for (const subj of subjects) {
@@ -275,29 +346,28 @@ const quizes = () => async (ctx: Context) => {
 
   // Handle /settime command
   if (setTimeMatch) {
-    if (!isAdmin(ctx)) {
+    if (!await isAdmin(ctx)) {
       await ctx.reply('❌ You are not authorized to use this command.');
       return;
     }
 
-    if (isAutoSending) {
-      await ctx.reply('⏰ Automatic question sending is already active.');
+    const chatId = ctx.chat.id.toString();
+    if (intervalIds.has(chatId)) {
+      await ctx.reply('⏰ Automatic question sending is already active in this chat.');
       return;
     }
 
     try {
-      const allQuestions = await fetchQuestions();
-      if (!allQuestions.length) {
+      const questions = await fetchQuestions();
+      if (!questions.length) {
         await ctx.reply('No questions available to send automatically.');
         return;
       }
 
-      isAutoSending = true;
-      intervalId = setInterval(async () => {
-        await sendRandomQuestion(ctx, allQuestions);
-      }, 60 * 1000); // 1 minute interval
-
-      await ctx.reply('⏰ Started sending a random question every minute.');
+      // Save chat ID to Firebase
+      await set(ref(db, `settime_groups/${chatId}`), true);
+      startAutoSending(ctx, chatId, questions);
+      await ctx.reply('⏰ Started sending a random question every minute in this chat.');
     } catch (err) {
       debug('Error setting up automatic question sending:', err);
       await ctx.reply('Oops! Failed to set up automatic question sending.');
@@ -307,22 +377,19 @@ const quizes = () => async (ctx: Context) => {
 
   // Handle /stoptime command
   if (stopTimeMatch) {
-    if (!isAdmin(ctx)) {
+    if (!await isAdmin(ctx)) {
       await ctx.reply('❌ You are not authorized to use this command.');
       return;
     }
 
-    if (!isAutoSending) {
-      await ctx.reply('⏰ Automatic question sending is not active.');
+    const chatId = ctx.chat.id.toString();
+    if (!intervalIds.has(chatId)) {
+      await ctx.reply('⏰ Automatic question sending is not active in this chat.');
       return;
     }
 
-    if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
-      isAutoSending = false;
-      await ctx.reply('⏰ Stopped automatic question sending.');
-    }
+    await stopAutoSending(chatId);
+    await ctx.reply('⏰ Stopped automatic question sending in this chat.');
     return;
   }
 
@@ -335,7 +402,6 @@ const quizes = () => async (ctx: Context) => {
       const allQuestions = await fetchQuestions();
       const chapters = getUniqueChapters(allQuestions);
       
-      // Find the best matching chapter using fuzzy search
       const matchedChapter = findBestMatchingChapter(chapters, chapterQuery);
       
       if (!matchedChapter) {
@@ -358,7 +424,6 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // If the matched chapter isn't an exact match, confirm with user
       if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
         await ctx.replyWithHTML(
           `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
@@ -408,8 +473,8 @@ const quizes = () => async (ctx: Context) => {
 
   // Handle /pyq, /b1, /c1, /p1 commands
   if (cmdMatch) {
-    const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-    const subjectCode = cmdMatch[2]; // b, c, p
+    const cmd = cmdMatch[1];
+    const subjectCode = cmdMatch[2];
     const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
 
     const subjectMap: Record<string, string> = {
