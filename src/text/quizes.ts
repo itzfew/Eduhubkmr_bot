@@ -570,4 +570,4 @@ const quizes = () => async (ctx: Context) => {
   }
 };
 
-export { quizes };
+module.exports = { quizes };
