@@ -8,6 +8,8 @@ const debug = createDebug('bot:quizes');
 let accessToken: string | null = null;
 let superAdmins: string[] = [];
 const intervalIds: Map<string, NodeJS.Timeout> = new Map();
+let lastFirebaseUpdate: number = 0; // To debounce Firebase onValue calls
+const DEBOUNCE_MS = 1000; // Debounce Firebase updates by 1 second
 
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
 const JSON_FILES: Record<string, string> = {
@@ -181,13 +183,14 @@ const startAutoSending = async (telegram: any, chatId: string, questions: any[])
   }
 
   if (intervalIds.has(chatId)) {
-    debug(`Interval already exists for chat ${chatId}, skipping`);
-    return;
+    debug(`Interval already exists for chat ${chatId}, clearing existing`);
+    clearInterval(intervalIds.get(chatId));
+    intervalIds.delete(chatId);
   }
 
   debug(`Starting auto-sending for chat ${chatId} with ${questions.length} questions`);
   const interval = setInterval(async () => {
-    debug(`Interval triggered for chat ${chatId}`);
+    debug(`Interval triggered for chat ${chatId} at ${new Date().toISOString()}`);
     await sendRandomQuestion(telegram, chatId, questions);
   }, 60 * 1000); // 1 minute interval
   intervalIds.set(chatId, interval);
@@ -209,6 +212,7 @@ const stopAutoSending = async (telegram: any, chatId: string) => {
     }
   } else {
     debug(`No interval found for chat ${chatId}`);
+    await telegram.sendMessage(chatId, '⏰ No active auto-sending found for this chat.');
   }
 };
 
@@ -218,28 +222,46 @@ const loadSetTimeGroups = async (telegram: any) => {
     debug('Loading settime groups from Firebase');
     const setTimeRef = ref(db, 'settime_groups');
     onValue(setTimeRef, async (snapshot) => {
+      const now = Date.now();
+      if (now - lastFirebaseUpdate < DEBOUNCE_MS) {
+        debug('Debouncing Firebase update');
+        return;
+      }
+      lastFirebaseUpdate = now;
+
       debug('settime_groups snapshot received');
       const data = snapshot.val();
       if (data) {
         const chatIds = Object.keys(data);
         debug(`Found ${chatIds.length} active settime groups: ${chatIds}`);
+
+        // Stop all existing intervals to prevent duplicates
+        for (const [chatId, interval] of intervalIds) {
+          debug(`Clearing existing interval for chat ${chatId}`);
+          clearInterval(interval);
+          intervalIds.delete(chatId);
+        }
+
+        // Start new intervals for active chats
         for (const chatId of chatIds) {
-          if (!intervalIds.has(chatId)) {
-            try {
-              debug(`Fetching questions for chat ${chatId}`);
-              const questions = await fetchQuestions();
-              debug(`Starting auto-sending for chat ${chatId}`);
-              await startAutoSending(telegram, chatId, questions);
-            } catch (err) {
-              debug(`Error starting auto-sending for chat ${chatId}:`, err);
-              await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
-            }
-          } else {
-            debug(`Auto-sending already active for chat ${chatId}`);
+          try {
+            debug(`Fetching questions for chat ${chatId}`);
+            const questions = await fetchQuestions();
+            debug(`Starting auto-sending for chat ${chatId}`);
+            await startAutoSending(telegram, chatId, questions);
+          } catch (err) {
+            debug(`Error starting auto-sending for chat ${chatId}:`, err);
+            await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
           }
         }
       } else {
-        debug('No settime groups found in Firebase');
+        debug('No settime groups found in Firebase, clearing all intervals');
+        // Clear all intervals if no active chats
+        for (const [chatId, interval] of intervalIds) {
+          clearInterval(interval);
+          intervalIds.delete(chatId);
+          await telegram.sendMessage(chatId, '⏰ Auto-sending stopped due to no active chats in Firebase.');
+        }
       }
     }, { onlyOnce: false });
   } catch (err) {
@@ -419,11 +441,6 @@ const quizes = () => async (ctx: Context) => {
     }
 
     const chatId = ctx.chat.id.toString();
-    if (!intervalIds.has(chatId)) {
-      await ctx.reply('⏰ Automatic question sending is not active in this chat.');
-      return;
-    }
-
     await stopAutoSending(ctx.telegram, chatId);
     return;
   }
