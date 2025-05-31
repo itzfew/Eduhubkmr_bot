@@ -63,12 +63,15 @@ const isAdmin = async (ctx: Context): Promise<boolean> => {
   const userId = ctx.from.id.toString();
 
   if (superAdmins.includes(userId)) {
+    debug(`User ${userId} is a super-admin`);
     return true;
   }
 
   try {
     const chatMember = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
-    return ['administrator', 'creator'].includes(chatMember.status);
+    const isAdmin = ['administrator', 'creator'].includes(chatMember.status);
+    debug(`User ${userId} admin check: ${isAdmin}`);
+    return isAdmin;
   } catch (err) {
     debug('Error checking admin status:', err);
     return false;
@@ -83,7 +86,7 @@ const loadSuperAdmins = async () => {
       const data = snapshot.val();
       superAdmins = data ? Object.values(data) : [];
       debug('Loaded super-admins:', superAdmins);
-    });
+    }, { onlyOnce: false });
   } catch (err) {
     debug('Error loading super-admins:', err);
   }
@@ -93,12 +96,16 @@ const loadSuperAdmins = async () => {
 const fetchQuestions = async (subject?: string): Promise<any[]> => {
   try {
     if (subject) {
+      debug(`Fetching questions for subject: ${subject}`);
       const response = await fetch(JSON_FILES[subject]);
       if (!response.ok) {
         throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
       }
-      return await response.json();
+      const questions = await response.json();
+      debug(`Fetched ${questions.length} questions for ${subject}`);
+      return questions;
     } else {
+      debug('Fetching questions for all subjects');
       const subjects = Object.keys(JSON_FILES);
       const allQuestions: any[] = [];
       for (const subj of subjects) {
@@ -110,6 +117,7 @@ const fetchQuestions = async (subject?: string): Promise<any[]> => {
         const questions = await response.json();
         allQuestions.push(...questions);
       }
+      debug(`Fetched ${allQuestions.length} questions for all subjects`);
       return allQuestions;
     }
   } catch (err) {
@@ -121,13 +129,16 @@ const fetchQuestions = async (subject?: string): Promise<any[]> => {
 // Send a single random question
 const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[]) => {
   try {
+    debug(`Attempting to send question to chat ${chatId}`);
     if (!questions.length) {
+      debug(`No questions available for chat ${chatId}`);
       await telegram.sendMessage(chatId, 'No questions available.');
       return;
     }
 
     const shuffled = questions.sort(() => 0.5 - Math.random());
     const question = shuffled[0];
+    debug(`Selected question for chat ${chatId}: ${question.question.substring(0, 50)}...`);
 
     const options = [
       question.options.A,
@@ -138,9 +149,11 @@ const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[
     const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
     if (question.image) {
+      debug(`Sending image for question in chat ${chatId}`);
       await telegram.sendPhoto(chatId, { url: question.image });
     }
 
+    debug(`Sending poll to chat ${chatId}`);
     await telegram.sendPoll(
       chatId,
       question.question,
@@ -152,8 +165,9 @@ const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[
         explanation: question.explanation || 'No explanation provided.',
       }
     );
+    debug(`Successfully sent question to chat ${chatId}`);
   } catch (err) {
-    debug('Error sending random question:', err);
+    debug(`Error sending random question to chat ${chatId}:`, err);
     await telegram.sendMessage(chatId, 'Oops! Failed to send a question.');
   }
 };
@@ -161,53 +175,73 @@ const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[
 // Start auto-sending questions for a chat
 const startAutoSending = async (telegram: any, chatId: string, questions: any[]) => {
   if (!questions.length) {
+    debug(`No questions available for auto-sending in chat ${chatId}`);
     await telegram.sendMessage(chatId, 'No questions available for auto-sending.');
     return;
   }
 
+  if (intervalIds.has(chatId)) {
+    debug(`Interval already exists for chat ${chatId}, skipping`);
+    return;
+  }
+
+  debug(`Starting auto-sending for chat ${chatId} with ${questions.length} questions`);
   const interval = setInterval(async () => {
+    debug(`Interval triggered for chat ${chatId}`);
     await sendRandomQuestion(telegram, chatId, questions);
   }, 60 * 1000); // 1 minute interval
   intervalIds.set(chatId, interval);
 };
 
 // Stop auto-sending for a chat
-const stopAutoSending = async (chatId: string) => {
+const stopAutoSending = async (telegram: any, chatId: string) => {
   const interval = intervalIds.get(chatId);
   if (interval) {
+    debug(`Stopping auto-sending for chat ${chatId}`);
     clearInterval(interval);
     intervalIds.delete(chatId);
     try {
       await remove(ref(db, `settime_groups/${chatId}`));
-      debug(`Stopped auto-sending for chat ${chatId}`);
+      debug(`Removed chat ${chatId} from settime_groups`);
+      await telegram.sendMessage(chatId, '⏰ Stopped automatic question sending in this chat.');
     } catch (err) {
       debug('Error removing settime group from Firebase:', err);
     }
+  } else {
+    debug(`No interval found for chat ${chatId}`);
   }
 };
 
 // Load active settime groups from Firebase
 const loadSetTimeGroups = async (telegram: any) => {
   try {
+    debug('Loading settime groups from Firebase');
     const setTimeRef = ref(db, 'settime_groups');
     onValue(setTimeRef, async (snapshot) => {
+      debug('settime_groups snapshot received');
       const data = snapshot.val();
       if (data) {
         const chatIds = Object.keys(data);
+        debug(`Found ${chatIds.length} active settime groups: ${chatIds}`);
         for (const chatId of chatIds) {
           if (!intervalIds.has(chatId)) {
             try {
+              debug(`Fetching questions for chat ${chatId}`);
               const questions = await fetchQuestions();
+              debug(`Starting auto-sending for chat ${chatId}`);
               await startAutoSending(telegram, chatId, questions);
-              debug(`Started auto-sending for chat ${chatId}`);
             } catch (err) {
               debug(`Error starting auto-sending for chat ${chatId}:`, err);
               await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
             }
+          } else {
+            debug(`Auto-sending already active for chat ${chatId}`);
           }
         }
+      } else {
+        debug('No settime groups found in Firebase');
       }
-    });
+    }, { onlyOnce: false });
   } catch (err) {
     debug('Error loading settime groups:', err);
   }
@@ -218,6 +252,7 @@ const quizes = () => async (ctx: Context) => {
 
   // Initialize Firebase data on first run
   if (!superAdmins.length) {
+    debug('Initializing Firebase data');
     await loadSuperAdmins();
     await loadSetTimeGroups(ctx.telegram);
   }
@@ -233,6 +268,7 @@ const quizes = () => async (ctx: Context) => {
   // Function to create a Telegraph account
   const createTelegraphAccount = async () => {
     try {
+      debug('Creating Telegraph account');
       const res = await fetch('https://api.telegra.ph/createAccount', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -298,6 +334,7 @@ const quizes = () => async (ctx: Context) => {
         { tag: 'code', children: ['/chapter living world 2'] },
       ];
 
+      debug('Creating Telegraph page');
       const res = await fetch('https://api.telegra.ph/createPage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -312,6 +349,7 @@ const quizes = () => async (ctx: Context) => {
       });
       const data = await res.json();
       if (data.ok) {
+        debug('Telegraph page created successfully');
         return data.result.url;
       } else {
         throw new Error(data.error);
@@ -356,6 +394,7 @@ const quizes = () => async (ctx: Context) => {
     }
 
     try {
+      debug(`Setting up auto-sending for chat ${chatId}`);
       const questions = await fetchQuestions();
       if (!questions.length) {
         await ctx.reply('No questions available to send automatically.');
@@ -385,8 +424,7 @@ const quizes = () => async (ctx: Context) => {
       return;
     }
 
-    await stopAutoSending(chatId);
-    await ctx.reply('⏰ Stopped automatic question sending in this chat.');
+    await stopAutoSending(ctx.telegram, chatId);
     return;
   }
 
