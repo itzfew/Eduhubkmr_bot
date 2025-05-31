@@ -186,11 +186,13 @@ const startAutoSending = async (telegram: any, chatId: string, questions: any[])
   }
 
   debug(`Starting auto-sending for chat ${chatId} with ${questions.length} questions`);
+  await sendRandomQuestion(telegram, chatId, questions); // Send first question immediately
   const interval = setInterval(async () => {
-  debug(`Interval triggered for chat ${chatId}`);
-  await sendRandomQuestion(telegram, chatId, questions);
-}, 30 * 60 * 1000); // 30 minute interval
-intervalIds.set(chatId, interval);
+    debug(`Interval triggered for chat ${chatId}`);
+    await sendRandomQuestion(telegram, chatId, questions);
+  }, 30 * 60 * 1000); // 30 minute interval
+  intervalIds.set(chatId, interval);
+};
 
 // Stop auto-sending for a chat
 const stopAutoSending = async (telegram: any, chatId: string) => {
@@ -256,7 +258,10 @@ const quizes = () => async (ctx: Context) => {
     await loadSetTimeGroups(ctx.telegram);
   }
 
-  if (!ctx.message || !('text' in ctx.message) || !ctx.chat) return;
+  if (!ctx.message || !('text' in ctx.message) || !ctx.chat) {
+    debug('Invalid message or chat context');
+    return;
+  }
 
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
@@ -430,7 +435,7 @@ const quizes = () => async (ctx: Context) => {
   // Handle /chapter command
   if (chapterMatch) {
     const chapterQuery = chapterMatch[1].trim();
-    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
+    const count = chapterMatchSpellCheckerBot: [2] ? parseInt(chapterMatch[2], 10) : 1;
 
     try {
       const allQuestions = await fetchQuestions();
@@ -444,130 +449,135 @@ const quizes = () => async (ctx: Context) => {
           `❌ No matching chapter found for "<b>${chapterQuery}</b>"\n\n${message}`
         );
         return;
-      }
+    }
 
-      const filteredByChapter = allQuestions.filter(
-        (q: any) => q.chapter?.trim() === matchedChapter
+    const filteredByChapter = allQuestions.filter(
+      (q: any) => q.chapter?.trim() === matchedChapter
+    );
+
+    if (!filteredByChapter.length) {
+      const { message } = await getChaptersMessage();
+      await ctx.replyWithHTML(
+        `❌ No questions found for chapter "<b>${matchedChapter}</b>"\n\n${message}`
       );
-
-      if (!filteredByChapter.length) {
-        const { message } = await getChaptersMessage();
-        await ctx.replyWithHTML(
-          `❌ No questions found for chapter "<b>${matchedChapter}</b>"\n\n${message}`
-        );
-        return;
-      }
-
-      if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
-        await ctx.replyWithHTML(
-          `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
-          `Sending questions from this chapter...\n` +
-          `(If this isn't correct, please try again with a more specific chapter name)`
-        );
-      }
-
-      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
-
-      if (!selected.length) {
-        await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
-        return;
-      }
-
-      for (const question of selected) {
-        const options = [
-          question.options.A,
-          question.options.B,
-          question.options.C,
-          question.options.D
-        ];
-        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-        
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
-        }
-        
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
-      await ctx.reply('Oops! Failed to load questions.');
-    }
-    return;
-  }
-
-  // Handle /pyq, /b1, /c1, /p1 commands
-  if (cmdMatch) {
-    const cmd = cmdMatch[1];
-    const subjectCode = cmdMatch[2];
-    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
-
-    const subjectMap: Record<string, string> = {
-      b: 'biology',
-      c: 'chemistry',
-      p: 'physics',
-    };
-    
-    let subject: string | null = null;
-    let isMixed = false;
-    
-    if (cmd === 'pyq') {
-      isMixed = true;
-    } else if (subjectCode) {
-      subject = subjectMap[subjectCode];
-    } else if (['b1', 'c1', 'p1'].includes(cmd)) {
-      subject = subjectMap[cmd[0]];
+      return;
     }
 
-    try {
-      const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
+    if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
+      await ctx.replyWithHTML(
+        `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
+        `Sending questions from this chapter...\n` +
+        `(If this isn't correct, please try again with a more specific chapter name)`
+      );
+    }
+
+    const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
+
+    if (!selected.length) {
+      await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
+      return;
+    }
+
+    for (const question of selected) {
+      const options = [
+        question.options.A,
+        question.options.B,
+        question.options.C,
+        question.options.D
+      ];
+      const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
       
-      if (!filtered.length) {
-        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
-        return;
+      if (question.image) {
+        await ctx.replyWithPhoto({ url: question.image });
       }
-
-      const shuffled = filtered.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(count, filtered.length));
-
-      for (const question of selected) {
-        const options = [
-          question.options.A,
-          question.options.B,
-          question.options.C,
-          question.options.D
-        ];
-        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-        
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
-        }
-        
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
-      await ctx.reply('Oops! Failed to load questions.');
+      
+      await ctx.sendPoll(
+        question.question,
+        options,
+        {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any
+      );
     }
+  } catch (err) {
+    debug('Error fetching questions:', err);
+    await ctx.reply('Oops! Failed to load questions.');
   }
+  return;
+}
+
+// Handle /pyq, /b1, /c1, /p1 commands
+if (cmdMatch) {
+  const cmd = cmdMatch[1];
+  const subjectCode = cmdMatch[2];
+  const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
+
+  const subjectMap: Record<string, string> = {
+    b: 'biology',
+    c: 'chemistry',
+    p: 'physics',
+  };
+  
+  let subject: string | null = null;
+  let isMixed = false;
+  
+  if (cmd === 'pyq') {
+    isMixed = true;
+  } else if (subjectCode) {
+    subject = subjectMap[subjectCode];
+  } else if (['b1', 'c1', 'p1'].includes(cmd)) {
+    subject = subjectMap[cmd[0]];
+  }
+
+  try {
+    const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
+    
+    if (!filtered.length) {
+      await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
+      return;
+    }
+
+    const shuffled = filtered.sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, Math.min(count, filtered.length));
+
+    for (const question of selected) {
+      const options = [
+        question.options.A,
+        question.options.B,
+        question.options.C,
+        question.options.D
+      ];
+      const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
+      
+      if (question.image) {
+        await ctx.replyWithPhoto({ url: question.image });
+      }
+      
+      await ctx.sendPoll(
+        question.question,
+        options,
+        {
+          type: 'quiz',
+          correct_option_id: correctOptionIndex,
+          is_anonymous: false,
+          explanation: question.explanation || 'No explanation provided.',
+        } as any
+      );
+    }
+  } catch (err) {
+    debug('Error fetching questions:', err);
+    await ctx.reply('Oops! Failed to load questions.');
+  }
+  return;
+}
+
+// Fallback for non-command messages
+debug(`Ignoring non-command message: ${text}`);
+await ctx.reply('Please use a valid command like /chapter, /pyq, /b1, /c1, /p1, /settime, or /stoptime.');
 };
 
 module.exports = { quizes };
