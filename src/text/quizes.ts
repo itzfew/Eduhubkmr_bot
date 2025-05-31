@@ -16,16 +16,6 @@ const JSON_FILES: Record<string, string> = {
   physics: `${BASE_URL}physics.json`,
 };
 
-// Interface for question structure
-interface Question {
-  question: string;
-  options: { A: string; B: string; C: string; D: string };
-  correct_option: string;
-  explanation?: string;
-  chapter?: string;
-  image?: string;
-}
-
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
   const maxLength = Math.max(a.length, b.length);
@@ -103,7 +93,7 @@ const loadSuperAdmins = async () => {
 };
 
 // Fetch questions for a specific subject or all subjects
-const fetchQuestions = async (subject?: string): Promise<Question[]> => {
+const fetchQuestions = async (subject?: string): Promise<any[]> => {
   try {
     if (subject) {
       debug(`Fetching questions for subject: ${subject}`);
@@ -117,7 +107,7 @@ const fetchQuestions = async (subject?: string): Promise<Question[]> => {
     } else {
       debug('Fetching questions for all subjects');
       const subjects = Object.keys(JSON_FILES);
-      const allQuestions: Question[] = [];
+      const allQuestions: any[] = [];
       for (const subj of subjects) {
         const response = await fetch(JSON_FILES[subj]);
         if (!response.ok) {
@@ -131,13 +121,13 @@ const fetchQuestions = async (subject?: string): Promise<Question[]> => {
       return allQuestions;
     }
   } catch (err) {
-    debug(' 更新された質問の取得エラー:', err);
+    debug('Error fetching questions:', err);
     throw err;
   }
 };
 
 // Send a single random question
-const sendRandomQuestion = async (telegram: any, chatId: string, questions: Question[]) => {
+const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[]) => {
   try {
     debug(`Attempting to send question to chat ${chatId}`);
     if (!questions.length) {
@@ -183,7 +173,7 @@ const sendRandomQuestion = async (telegram: any, chatId: string, questions: Ques
 };
 
 // Start auto-sending questions for a chat
-const startAutoSending = async (telegram: any, chatId: string, questions: Question[]) => {
+const startAutoSending = async (telegram: any, chatId: string, questions: any[]) => {
   if (!questions.length) {
     debug(`No questions available for auto-sending in chat ${chatId}`);
     await telegram.sendMessage(chatId, 'No questions available for auto-sending.');
@@ -197,18 +187,10 @@ const startAutoSending = async (telegram: any, chatId: string, questions: Questi
 
   debug(`Starting auto-sending for chat ${chatId} with ${questions.length} questions`);
   const interval = setInterval(async () => {
-    try {
-      debug(`Interval triggered for chat ${chatId}`);
-      await sendRandomQuestion(telegram, chatId, questions);
-    } catch (err) {
-      debug(`Error in interval for chat ${chatId}:`, err);
-      await telegram.sendMessage(chatId, 'Error sending question. Auto-sending stopped.');
-      await stopAutoSending(telegram, chatId);
-    }
-  }, 30 * 60 * 1000); // 30 minute interval
-  intervalIds.set(chatId, interval);
-  debug(`Interval set for chat ${chatId}`);
-};
+  debug(`Interval triggered for chat ${chatId}`);
+  await sendRandomQuestion(telegram, chatId, questions);
+}, 30 * 60 * 1000); // 30 minute interval
+intervalIds.set(chatId, interval);
 
 // Stop auto-sending for a chat
 const stopAutoSending = async (telegram: any, chatId: string) => {
@@ -226,7 +208,6 @@ const stopAutoSending = async (telegram: any, chatId: string) => {
     }
   } else {
     debug(`No interval found for chat ${chatId}`);
-    await telegram.sendMessage(chatId, '⏰ Automatic question sending is not active in this chat.');
   }
 };
 
@@ -238,31 +219,26 @@ const loadSetTimeGroups = async (telegram: any) => {
     onValue(setTimeRef, async (snapshot) => {
       debug('settime_groups snapshot received');
       const data = snapshot.val();
-      const activeChatIds = data ? Object.keys(data) : [];
-
-      // Stop intervals for chats no longer in Firebase
-      for (const [chatId, interval] of intervalIds) {
-        if (!activeChatIds.includes(chatId)) {
-          debug(`Chat ${chatId} removed from settime_groups, stopping interval`);
-          await stopAutoSending(telegram, chatId);
-        }
-      }
-
-      // Start intervals for active chats
-      for (const chatId of activeChatIds) {
-        if (!intervalIds.has(chatId)) {
-          try {
-            debug(`Fetching questions for chat ${chatId}`);
-            const questions = await fetchQuestions();
-            debug(`Starting auto-sending for chat ${chatId}`);
-            await startAutoSending(telegram, chatId, questions);
-          } catch (err) {
-            debug(`Error starting auto-sending for chat ${chatId}:`, err);
-            await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
+      if (data) {
+        const chatIds = Object.keys(data);
+        debug(`Found ${chatIds.length} active settime groups: ${chatIds}`);
+        for (const chatId of chatIds) {
+          if (!intervalIds.has(chatId)) {
+            try {
+              debug(`Fetching questions for chat ${chatId}`);
+              const questions = await fetchQuestions();
+              debug(`Starting auto-sending for chat ${chatId}`);
+              await startAutoSending(telegram, chatId, questions);
+            } catch (err) {
+              debug(`Error starting auto-sending for chat ${chatId}:`, err);
+              await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
+            }
+          } else {
+            debug(`Auto-sending already active for chat ${chatId}`);
           }
-        } else {
-          debug(`Auto-sending already active for chat ${chatId}`);
         }
+      } else {
+        debug('No settime groups found in Firebase');
       }
     }, { onlyOnce: false });
   } catch (err) {
@@ -270,19 +246,22 @@ const loadSetTimeGroups = async (telegram: any) => {
   }
 };
 
-// Initialize Firebase data at module level
-loadSuperAdmins();
-loadSetTimeGroups(telegram); // Note: telegram must be available here, or pass it when initializing
-
 const quizes = () => async (ctx: Context) => {
   debug('Triggered "quizes" handler');
+
+  // Initialize Firebase data on first run
+  if (!superAdmins.length) {
+    debug('Initializing Firebase data');
+    await loadSuperAdmins();
+    await loadSetTimeGroups(ctx.telegram);
+  }
 
   if (!ctx.message || !('text' in ctx.message) || !ctx.chat) return;
 
   const text = ctx.message.text.trim().toLowerCase();
   const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
   const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
-  const setTimeMatch = text.match(/^\/settime(?:\s+(\d+))?$/); // Updated to allow optional interval
+  const setTimeMatch = text.match(/^\/settime$/);
   const stopTimeMatch = text.match(/^\/stoptime$/);
 
   // Function to create a Telegraph account
@@ -312,9 +291,9 @@ const quizes = () => async (ctx: Context) => {
   };
 
   // Function to get unique chapters
-  const getUniqueChapters = (questions: Question[]) => {
-    const chapters = new Set(questions.map((q: Question) => q.chapter?.trim()));
-    return Array.from(chapters).filter(ch => ch).sort() as string[];
+  const getUniqueChapters = (questions: any[]) => {
+    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
+    return Array.from(chapters).filter(ch => ch).sort();
   };
 
   // Function to create a Telegraph page with chapters list
@@ -421,7 +400,6 @@ const quizes = () => async (ctx: Context) => {
         return;
       }
 
-      // Store in Firebase before starting interval
       await set(ref(db, `settime_groups/${chatId}`), true);
       await startAutoSending(ctx.telegram, chatId, questions);
       await ctx.reply('⏰ Started sending a random question every 30 minutes in this chat.');
@@ -440,6 +418,11 @@ const quizes = () => async (ctx: Context) => {
     }
 
     const chatId = ctx.chat.id.toString();
+    if (!intervalIds.has(chatId)) {
+      await ctx.reply('⏰ Automatic question sending is not active in this chat.');
+      return;
+    }
+
     await stopAutoSending(ctx.telegram, chatId);
     return;
   }
@@ -464,7 +447,7 @@ const quizes = () => async (ctx: Context) => {
       }
 
       const filteredByChapter = allQuestions.filter(
-        (q: Question) => q.chapter?.trim() === matchedChapter
+        (q: any) => q.chapter?.trim() === matchedChapter
       );
 
       if (!filteredByChapter.length) {
