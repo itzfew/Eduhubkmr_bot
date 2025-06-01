@@ -34,25 +34,38 @@ function getRandomTextColor(): string {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function getCountdown(): string {
+function calculateTimeUntilTarget(): string {
   const targetDate = new Date('2026-05-03T00:00:00Z');
   const now = new Date();
   const diffMs = targetDate.getTime() - now.getTime();
 
   if (diffMs <= 0) {
-    return 'Countdown has ended!';
+    return 'Time is up!';
   }
 
   const diffSeconds = Math.floor(diffMs / 1000);
-  const months = Math.floor(diffSeconds / (60 * 60 * 24 * 30));
-  const days = Math.floor((diffSeconds % (60 * 60 * 24 * 30)) / (60 * 60 * 24));
-  const hours = Math.floor((diffSeconds % (60 * 60 * 24)) / (60 * 60));
+  const months = Math.floor(diffSeconds / (30 * 24 * 60 * 60)); // Approximate months
+  const days = Math.floor((diffSeconds % (30 * 24 * 60 * 60)) / (24 * 60 * 60));
+  const hours = Math.floor((diffSeconds % (24 * 60 * 60)) / (60 * 60));
   const minutes = Math.floor((diffSeconds % (60 * 60)) / 60);
 
-  return `${months} Months\n${days} Days\n${hours} Hours\n${minutes} Minutes`;
+  return `${months} Months ${days} Days ${hours} Hours ${minutes} Minutes`;
 }
 
-async function generateCountdownImage(): Promise<{ buffer: Buffer; fontUsed: string }> {
+function splitText(text: string): [string, string] {
+  const words = text.trim().split(/\s+/);
+  let line1 = '', line2 = '';
+  if (words.length <= 2) {
+    line1 = words.join(' ');
+  } else {
+    const mid = Math.ceil(words.length / 2);
+    line1 = words.slice(0, mid).join(' ');
+    line2 = words.slice(mid).join(' ');
+  }
+  return [line1, line2];
+}
+
+async function generateLogo(text: string): Promise<{ buffer: Buffer, fontUsed: string }> {
   const width = 1000;
   const height = 400;
   const canvas = createCanvas(width, height);
@@ -64,19 +77,20 @@ async function generateCountdownImage(): Promise<{ buffer: Buffer; fontUsed: str
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(0, 0, width, height);
 
-  // Get countdown text
-  const countdownText = getCountdown();
-  const lines = countdownText.split('\n');
+  // Split text
+  const [line1, line2] = splitText(text);
 
   // Auto-size font
-  let fontSize = 80;
-  ctx.font = `bold ${fontSize}px "${fontFamily}"`;
-  const maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
-  while (maxWidth > width * 0.85 && fontSize > 10) {
-    fontSize -= 2;
+  let fontSize = 100;
+  do {
     ctx.font = `bold ${fontSize}px "${fontFamily}"`;
-  }
+    fontSize -= 2;
+  } while (
+    Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width) > width * 0.85 &&
+    fontSize > 10
+  );
 
+  ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -103,9 +117,8 @@ async function generateCountdownImage(): Promise<{ buffer: Buffer; fontUsed: str
   ctx.rotate(angle);
 
   const lineHeight = fontSize + 20;
-  lines.forEach((line, index) => {
-    ctx.fillText(line.toUpperCase(), 0, (index - (lines.length - 1) / 2) * lineHeight);
-  });
+  if (line1) ctx.fillText(line1.toUpperCase(), 0, -lineHeight / 2);
+  if (line2) ctx.fillText(line2.toUpperCase(), 0, lineHeight / 2);
 
   ctx.restore();
 
@@ -113,18 +126,27 @@ async function generateCountdownImage(): Promise<{ buffer: Buffer; fontUsed: str
 }
 
 // Telegraf Command
-const countdownCommand = () => async (ctx: Context) => {
+const logoCommand = () => async (ctx: Context) => {
   try {
-    const { buffer, fontUsed } = await generateCountdownImage();
+    const message = ctx.message;
+    const text = message?.text || '';
+    const match = text.match(/^\/gen\b/i);
+
+    if (!match) {
+      return ctx.reply('❗ *Usage:* `/gen` to generate a countdown image until May 3, 2026', { parse_mode: 'Markdown' });
+    }
+
+    const countdownText = calculateTimeUntilTarget();
+    const { buffer, fontUsed } = await generateLogo(countdownText);
 
     await ctx.replyWithPhoto({ source: buffer }, {
-      caption: `🕒 *Countdown to May 3, 2026!*\nFont: \`${fontUsed}\``,
+      caption: `🖼️ *Time until May 3, 2026!*\nFont: \`${fontUsed}\``,
       parse_mode: 'Markdown',
     });
   } catch (err) {
-    console.error('⚠️ Countdown image generation error:', err);
+    console.error('⚠️ Logo generation error:', err);
     await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
   }
 };
 
-export { countdownCommand };
+export { logoCommand };
