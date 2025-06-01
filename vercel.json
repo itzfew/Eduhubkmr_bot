@@ -1,20 +1,11 @@
 {
-  "builds": [
+  "version": 2,
+  "public": true,
+  "rewrites": [
     {
-      "src": "public/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["public/**", "assets/**"]
-      }
+      "source": "/(.*)",
+      "destination": "api/index.ts"
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "public/index.js"
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "redirects": [{ "source": "/", "destination": "/api", "permanent": false }]
 }
