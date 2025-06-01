@@ -1,131 +1,94 @@
 import { Context } from 'telegraf';
-import { User } from 'telegraf/typings/core/types/typegram';
 import { isPrivateChat } from '../utils/groupSettings';
 
-interface UserInfo {
+function formatUserLink(id: number, name: string) {
+  const encodedName = name.replace(//g, '(').replace(//g, ')');
+  return `[${encodedName}](tg://user?id=${id})`;
+}
+
+interface BasicUserInfo {
   id: number;
   name: string;
   username?: string;
   languageCode?: string;
 }
 
-export function setupInfoCommands() {
+export function me() {
   return async (ctx: Context) => {
     try {
-      if (!ctx.message || !('text' in ctx.message)) {
-        return ctx.reply('Invalid command. Use /me, /info id <user_id>, or /info username <username>.');
-      }
+      const user = ctx.from;
+      if (!user) return ctx.reply('Could not find your user data.');
 
-      const text = ctx.message.text;
-      const args = text.split(' ').slice(1); // Get arguments after command
-      const command = text.split(' ')[0].toLowerCase(); // Get command (/me or /info)
+      const userInfo: BasicUserInfo = {
+        id: user.id,
+        name: `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`,
+        username: user.username,
+        languageCode: user.language_code || 'Unknown',
+      };
 
-      if (command === '/me') {
-        if (!ctx.from || !ctx.chat) {
-          return ctx.reply('Could not identify your user information.');
-        }
-        const userInfo = await getUserInfo(ctx, ctx.from);
-        return isPrivateChat(ctx.chat.type)
-          ? sendPrivateUserInfo(ctx, userInfo)
-          : sendGroupUserInfo(ctx, userInfo);
-      }
+      const text = `
+👤 *Your Info* 👤
 
-      if (command === '/info' && args.length >= 2) {
-        const type = args[0].toLowerCase();
-        const query = args[1];
+🆔 *ID:* \`${userInfo.id}\`
+📛 *Name:* ${formatUserLink(userInfo.id, userInfo.name)}
+🔖 *Username:* ${userInfo.username ? '@' + userInfo.username : 'None'}
+🌐 *Language:* ${userInfo.languageCode}
+`;
 
-        let user: User | undefined;
-        if (type === 'id') {
-          // Fetch user by ID
-          try {
-            const chatMember = await ctx.telegram.getChatMember(ctx.chat!.id, parseInt(query));
-            user = chatMember.user;
-          } catch {
-            return ctx.reply('User not found or invalid ID.');
-          }
-        } else if (type === 'username') {
-          // Resolve username to user ID
-          try {
-            const chat = await ctx.telegram.getChat(query.startsWith('@') ? query : `@${query}`);
-            if ('type' in chat && chat.type === 'private') {
-              user = {
-                id: chat.id,
-                first_name: chat.first_name || '',
-                last_name: chat.last_name,
-                username: chat.username,
-                is_bot: false,
-                language_code: undefined,
-              };
-            }
-          } catch {
-            return ctx.reply('User not found or invalid username.');
-          }
-        } else {
-          return ctx.reply('Invalid command. Use /info id <user_id> or /info username <username>.');
-        }
-
-        if (user) {
-          const userInfo = await getUserInfo(ctx, user);
-          return isPrivateChat(ctx.chat!.type)
-            ? sendPrivateUserInfo(ctx, userInfo)
-            : sendGroupUserInfo(ctx, userInfo);
-        }
-      }
-
-      return ctx.reply('Usage: /me or /info id <user_id> or /info username <username>');
-    } catch (error) {
-      console.error('Error in info command:', error);
-      await ctx.reply('An error occurred while processing your request.');
+      await ctx.reply(text, { parse_mode: 'Markdown' });
+    } catch (err) {
+      console.error('Error in /me:', err);
+      await ctx.reply('An error occurred while fetching your info.');
     }
   };
 }
 
-async function getUserInfo(ctx: Context, user: User): Promise<UserInfo> {
-  return {
-    id: user.id,
-    name: `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`,
-    username: user.username,
-    languageCode: user.language_code ?? 'Unknown',
+export function info() {
+  return async (ctx: Context) => {
+    try {
+      const query = ctx.message?.text?.split(' ').slice(1).join(' ').trim();
+      if (!query) {
+        return ctx.reply('Usage: /info <user_id or @username>');
+      }
+
+      let userId: number | undefined;
+      let username: string | undefined;
+
+      if (/^@?\w{5,32}$/.test(query)) {
+        username = query.replace('@', '');
+      } else if (/^\d{6,15}$/.test(query)) {
+        userId = parseInt(query);
+      } else {
+        return ctx.reply('Invalid ID or username.');
+      }
+
+      let user;
+      try {
+        if (username) {
+          user = await ctx.telegram.getChat(`@${username}`);
+        } else if (userId) {
+          user = await ctx.telegram.getChat(userId);
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        return ctx.reply('Could not retrieve user info. The bot may not have access.');
+      }
+
+      const name = user.first_name + (user.last_name ? ' ' + user.last_name : '');
+
+      const text = `
+👤 *User Info* 👤
+
+🆔 *ID:* \`${user.id}\`
+📛 *Name:* ${formatUserLink(user.id, name)}
+🔖 *Username:* ${user.username ? '@' + user.username : 'None'}
+🌐 *Language:* ${user.language_code || 'Unknown'}
+`;
+
+      await ctx.reply(text, { parse_mode: 'Markdown' });
+    } catch (err) {
+      console.error('Error in /info:', err);
+      await ctx.reply('An error occurred while processing your request.');
+    }
   };
-}
-
-async function sendPrivateUserInfo(ctx: Context, userInfo: UserInfo) {
-  const profileLink = userInfo.username
-    ? `[${userInfo.name}](tg://user?id=${userInfo.id})`
-    : userInfo.name;
-
-  const text = `
-👤 *User Information* 👤
-
-🆔 *ID:* \`${userInfo.id}\`
-📛 *Name:* ${profileLink}
-🔖 *Username:* ${userInfo.username ? '@' + userInfo.username : 'None'}
-🌐 *Language:* ${userInfo.languageCode}
-
-_This information is only visible to you._
-  `;
-
-  await ctx.reply(text, {
-    parse_mode: 'Markdown',
-  });
-}
-
-async function sendGroupUserInfo(ctx: Context, userInfo: UserInfo) {
-  const profileLink = userInfo.username
-    ? `<a href="tg://user?id=${userInfo.id}">${userInfo.name}</a>`
-    : userInfo.name;
-
-  const text = `
-👤 User Information 👤
-
-📛 Name: ${profileLink}
-🔖 Username: ${userInfo.username ? '@' + userInfo.username : 'None'}
-🌐 Language: ${userInfo.languageCode}
-  `;
-
-  await ctx.replyWithHTML(text, {
-    reply_parameters: {
-      message_id: ctx.message?.message_id!,
-    },
-  });
 }
