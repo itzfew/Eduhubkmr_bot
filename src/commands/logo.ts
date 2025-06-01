@@ -76,15 +76,16 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
 
   // Enhanced Background Gradient
   const bgGradient = ctx.createLinearGradient(0, 0, width, height);
-  bgGradient.addColorStop(0, '#1e293b');
-  bgGradient.addColorStop(0.5, '#334155');
+  bgGradient.addColorStop(0, '#0f172a');
+  bgGradient.addColorStop(0.3, '#1e293b');
+  bgGradient.addColorStop(0.7, '#334155');
   bgGradient.addColorStop(1, '#475569');
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  // Subtle Star Pattern
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-  for (let i = 0; i < 50; i++) {
+  // Subtle Sparkle Effect
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  for (let i = 0; i < 60; i++) {
     const x = Math.random() * width;
     const y = Math.random() * height;
     ctx.beginPath();
@@ -95,35 +96,35 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   // Stopwatch Circle
   const circleX = 350;
   const circleY = height / 2;
-  const circleRadius = 150;
+  const circleRadius = 140;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
-  ctx.lineWidth = 20;
+  ctx.lineWidth = 15;
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  // Glow Effect for Circle
-  ctx.shadowColor = `${color}80`;
-  ctx.shadowBlur = 30;
+  // Subtle Glow for Circle
+  ctx.shadowColor = `${color}66`;
+  ctx.shadowBlur = 20;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.strokeStyle = color;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Colored Clock Markers
+  // Clock Markers
   for (let i = 0; i < 12; i++) {
     const angle = i * 30 * (Math.PI / 180);
-    const dotX = circleX + Math.cos(angle) * (circleRadius - 25);
-    const dotY = circleY + Math.sin(angle) * (circleRadius - 25);
+    const dotX = circleX + Math.cos(angle) * (circleRadius - 20);
+    const dotY = circleY + Math.sin(angle) * (circleRadius - 20);
     ctx.beginPath();
-    ctx.arc(dotX, dotY, 6, 0, 2 * Math.PI);
+    ctx.arc(dotX, dotY, 5, 0, 2 * Math.PI);
     ctx.fillStyle = secondaryColor;
     ctx.fill();
   }
 
   // Center Text (Days)
-  let fontSize = 120;
+  let fontSize = 100;
   ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   while (ctx.measureText(daysText).width > circleRadius * 1.6 && fontSize > 30) {
     fontSize -= 2;
@@ -132,106 +133,86 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-  ctx.shadowBlur = 15;
-  ctx.fillText(daysText, circleX, circleY - 20); // Slight offset for balance
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 10;
+  ctx.fillText(daysText, circleX, circleY);
   ctx.shadowBlur = 0;
 
   // Stopwatch Knobs
   ctx.fillStyle = color;
-  ctx.fillRect(circleX - 35, circleY - circleRadius - 30, 70, 35); // Top knob
+  ctx.fillRect(circleX - 30, circleY - circleRadius - 25, 60, 30); // Top knob
   ctx.fillStyle = secondaryColor;
   ctx.save();
-  ctx.translate(circleX - circleRadius - 20, circleY - circleRadius + 20);
+  ctx.translate(circleX - circleRadius - 15, circleY - circleRadius + 15);
   ctx.rotate(-30 * (Math.PI / 180));
-  ctx.fillRect(-25, -25, 50, 25);
+  ctx.fillRect(-20, -20, 40, 20);
   ctx.restore();
 
-  // Ribbon for "DAYS"
-  const ribbonX = 650;
-  const ribbonY = height / 2 - 120;
-  const ribbonWidth = 300;
-  const ribbonHeight = 80;
+  // Text Section
+  const textX = 650;
+  const textY = height / 2 - 100;
+
+  // "DAYS" Text
+  ctx.font = `bold 50px "${fontFamily}"`;
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(ribbonX, ribbonY);
-  ctx.lineTo(ribbonX + ribbonWidth, ribbonY);
-  ctx.lineTo(ribbonX + ribbonWidth + 60, ribbonY + ribbonHeight / 2);
-  ctx.lineTo(ribbonX + ribbonWidth, ribbonY + ribbonHeight);
-  ctx.lineTo(ribbonX, ribbonY + ribbonHeight);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillText('DAYS', textX, textY);
 
-  // Glow Effect for Ribbon
-  ctx.shadowColor = `${color}66`;
-  ctx.shadowBlur = 20;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // "DAYS" Text on Ribbon
-  ctx.font = `bold 48px "${fontFamily}"`;
+  // "LEFT" Text
+  ctx.font = `extrabold 80px "${fontFamily}"`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2 + 15);
+  ctx.fillText('LEFT', textX, textY + 80);
 
   // "For NEET" Text
-  ctx.font = `extrabold 60px "${fontFamily}"`;
+  ctx.font = `bold 50px "${fontFamily}"`;
   ctx.fillStyle = secondaryColor;
   ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
   ctx.shadowBlur = 10;
-  ctx.fillText('For NEET', ribbonX + ribbonWidth / 2, ribbonY - 60);
+  ctx.fillText('For NEET', textX, textY + 140);
   ctx.shadowBlur = 0;
 
-  // "LEFT" Text
-  ctx.font = `extrabold 90px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 90);
-
   // "Until May 3, 2026" Text
-  ctx.font = `italic 36px "${fontFamily}"`;
+  ctx.font = `italic 32px "${fontFamily}"`;
   ctx.fillStyle = '#f1f5f9';
-  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 150);
+  ctx.fillText('Until May 3, 2026', textX, textY + 190);
 
-  // Quote Text
-  let quoteFontSize = 32;
-  ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
-  const quoteWords = quote.split(' ');
-  let quoteLines: string[] = [];
-  let currentLine = '';
-  for (const word of quoteWords) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
-    if (ctx.measureText(testLine).width > width * 0.75) {
-      quoteLines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-  if (currentLine) quoteLines.push(currentLine);
-
+  // Curved Quote Text
+  const quoteRadius = 100;
+  const quoteX = width / 2;
+  const quoteY = height - 100;
+  ctx.font = `italic 28px "${fontFamily}"`;
   ctx.fillStyle = '#f1f5f9';
-  const quoteY = height - 150;
-  quoteLines.forEach((line, index) => {
-    ctx.fillText(line, width / 2, quoteY + index * 40);
+  ctx.textAlign = 'center';
+  ctx.save();
+  ctx.translate(quoteX, quoteY);
+  const words = quote.split(' ');
+  let anglePerWord = (Math.PI * 1.5) / words.length;
+  let currentAngle = -Math.PI * 0.75;
+  words.forEach((word) => {
+    ctx.save();
+    ctx.rotate(currentAngle);
+    ctx.fillText(word, 0, -quoteRadius);
+    ctx.restore();
+    currentAngle += anglePerWord;
   });
+  ctx.restore();
 
-  // Motivational Arrow Graphic
-  ctx.fillStyle = color;
+  // Decorative Elements
+  ctx.fillStyle = secondaryColor;
   ctx.beginPath();
-  ctx.moveTo(width - 150, 50);
-  ctx.lineTo(width - 100, 100);
-  ctx.lineTo(width - 120, 100);
-  ctx.lineTo(width - 120, 150);
-  ctx.lineTo(width - 80, 150);
+  ctx.moveTo(width - 120, 60);
   ctx.lineTo(width - 80, 100);
   ctx.lineTo(width - 100, 100);
+  ctx.lineTo(width - 100, 140);
+  ctx.lineTo(width - 60, 140);
+  ctx.lineTo(width - 60, 100);
+  ctx.lineTo(width - 80, 100);
   ctx.closePath();
   ctx.fill();
 
-  // Decorative Border
+  // Outer Border
   ctx.strokeStyle = color;
-  ctx.lineWidth = 10;
-  ctx.strokeRect(20, 20, width - 40, height - 40);
+  ctx.lineWidth = 8;
+  ctx.strokeRect(15, 15, width - 30, height - 30);
 
   return { buffer: canvas.toBuffer('image/png'), fontUsed: fontFamily, quoteUsed: quote };
 }
@@ -248,12 +229,12 @@ const logoCommand = () => async (ctx: Context) => {
     }
 
     const countdownText = calculateDaysUntilTarget();
-    const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText);
+    const { buffer, quoteUsed } = await generateLogo(countdownText);
 
     await ctx.replyWithPhoto(
       { source: buffer },
       {
-        caption: `🖼️ *Days until May 3, 2026 for NEET!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+        caption: `🖼️ *Days until May 3, 2026 for NEET!*\nQuote: _"${quoteUsed}"_`,
         parse_mode: 'Markdown',
       }
     );
