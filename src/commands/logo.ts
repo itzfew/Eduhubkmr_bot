@@ -167,20 +167,26 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // "DAYS" text on ribbon
-  ctx.font = `bold 48px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
-  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
+// "DAYS" text on ribbon
+ctx.font = `bold 48px "${fontFamily}"`;
+ctx.fillStyle = '#ffffff'; // White for high contrast
+ctx.textAlign = 'center';
+ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
-  // "LEFT" text
-  ctx.font = `extrabold 90px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
-  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
+// "LEFT" text
+ctx.font = `extrabold 90px "${fontFamily}"`;
+ctx.fillStyle = '#ffffff'; // White for high contrast
+ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
 
-  // "Until May 3, 2026" text
-  ctx.font = `italic 36px "${fontFamily}"`;
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
-  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
+// "FOR NEET" text (in aqua #3498db)
+ctx.font = `bold 40px "${fontFamily}"`;
+ctx.fillStyle = '#3498db'; // Aqua blue for NEET highlight
+ctx.fillText('FOR NEET', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 30);
+
+// "Until May 3, 2026" text
+ctx.font = `italic 36px "${fontFamily}"`;
+ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
+ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
 
   // Quote text
   let quoteFontSize = 32;
