@@ -119,7 +119,7 @@ bot.command('quote', quote());
 bot.command('quiz', playquiz());
 bot.command('neetcountdown', pin());
 bot.command('stopcountdown', stopCountdown());
-bot.command('gen', logoCommand());
+bot.command('countdown', logoCommand());
 
 // New command to show user count from Google Sheets
 bot.command('users', async (ctx) => {
