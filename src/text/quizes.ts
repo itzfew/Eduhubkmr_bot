@@ -2,14 +2,15 @@ import { Context } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
 import { db, ref, set, onValue, remove } from '../utils/firebase';
+import schedule from 'node-schedule'; // Added for scheduling
 
 const debug = createDebug('bot:quizes');
 
 let accessToken: string | null = null;
 let superAdmins: string[] = [];
-const intervalIds: Map<string, NodeJS.Timeout> = new Map();
-let lastFirebaseUpdate: number = 0; // To debounce Firebase onValue calls
-const DEBOUNCE_MS = 1000; // Debounce Firebase updates by 1 second
+const scheduledJobs: Map<string, schedule.Job> = new Map(); // Changed from intervalIds to scheduledJobs
+let lastFirebaseUpdate: number = 0;
+const DEBOUNCE_MS = 1000;
 
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
 const JSON_FILES: Record<string, string> = {
@@ -174,7 +175,7 @@ const sendRandomQuestion = async (telegram: any, chatId: string, questions: any[
   }
 };
 
-// Start auto-sending questions for a chat
+// Start auto-sending questions for a chat at fixed times (e.g., 1:00, 1:30, etc.)
 const startAutoSending = async (telegram: any, chatId: string, questions: any[]) => {
   if (!questions.length) {
     debug(`No questions available for auto-sending in chat ${chatId}`);
@@ -182,27 +183,31 @@ const startAutoSending = async (telegram: any, chatId: string, questions: any[])
     return;
   }
 
-  if (intervalIds.has(chatId)) {
-    debug(`Interval already exists for chat ${chatId}, clearing existing`);
-    clearInterval(intervalIds.get(chatId));
-    intervalIds.delete(chatId);
+  if (scheduledJobs.has(chatId)) {
+    debug(`Scheduled job already exists for chat ${chatId}, cancelling existing`);
+    scheduledJobs.get(chatId)?.cancel();
+    scheduledJobs.delete(chatId);
   }
 
   debug(`Starting auto-sending for chat ${chatId} with ${questions.length} questions`);
-  const interval = setInterval(async () => {
-    debug(`Interval triggered for chat ${chatId} at ${new Date().toISOString()}`);
+
+  // Schedule job to run every 30 minutes (on the hour and half-hour)
+  const job = schedule.scheduleJob('0,30 * * * *', async () => {
+    debug(`Scheduled job triggered for chat ${chatId} at ${new Date().toISOString()}`);
     await sendRandomQuestion(telegram, chatId, questions);
-  }, 30 * 60 * 1000); // 30 minutes interval
-  intervalIds.set(chatId, interval);
+  });
+
+  scheduledJobs.set(chatId, job);
+  debug(`Scheduled job set for chat ${chatId}`);
 };
 
 // Stop auto-sending for a chat
 const stopAutoSending = async (telegram: any, chatId: string) => {
-  const interval = intervalIds.get(chatId);
-  if (interval) {
+  const job = scheduledJobs.get(chatId);
+  if (job) {
     debug(`Stopping auto-sending for chat ${chatId}`);
-    clearInterval(interval);
-    intervalIds.delete(chatId);
+    job.cancel();
+    scheduledJobs.delete(chatId);
     try {
       await remove(ref(db, `settime_groups/${chatId}`));
       debug(`Removed chat ${chatId} from settime_groups`);
@@ -211,7 +216,7 @@ const stopAutoSending = async (telegram: any, chatId: string) => {
       debug('Error removing settime group from Firebase:', err);
     }
   } else {
-    debug(`No interval found for chat ${chatId}`);
+    debug(`No scheduled job found for chat ${chatId}`);
     await telegram.sendMessage(chatId, '⏰ No active auto-sending found for this chat.');
   }
 };
@@ -235,31 +240,31 @@ const loadSetTimeGroups = async (telegram: any) => {
         const chatIds = Object.keys(data);
         debug(`Found ${chatIds.length} active settime groups: ${chatIds}`);
 
-        // Stop all existing intervals to prevent duplicates
-        for (const [chatId, interval] of intervalIds) {
-          debug(`Clearing existing interval for chat ${chatId}`);
-          clearInterval(interval);
-          intervalIds.delete(chatId);
+        // Cancel all existing jobs to prevent duplicates
+        for (const [chatId, job] of scheduledJobs) {
+          debug(`Cancelling existing job for chat ${chatId}`);
+          job.cancel();
+          scheduledJobs.delete(chatId);
         }
 
-        // Start new intervals for active chats
+        // Start new jobs for active chats
         for (const chatId of chatIds) {
           try {
             debug(`Fetching questions for chat ${chatId}`);
             const questions = await fetchQuestions();
             debug(`Starting auto-sending for chat ${chatId}`);
-            await startAutoSending(telegram, chatId, questions);
+            await startAutoSending(telegraph, chatId, questions);
           } catch (err) {
             debug(`Error starting auto-sending for chat ${chatId}:`, err);
             await telegram.sendMessage(chatId, 'Failed to resume auto-sending questions.');
           }
         }
       } else {
-        debug('No settime groups found in Firebase, clearing all intervals');
-        // Clear all intervals if no active chats
-        for (const [chatId, interval] of intervalIds) {
-          clearInterval(interval);
-          intervalIds.delete(chatId);
+        debug('No settime groups found in Firebase, cancelling all jobs');
+        // Cancel all jobs if no active chats
+        for (const [chatId, job] of scheduledJobs) {
+          job.cancel();
+          scheduledJobs.delete(chatId);
           await telegram.sendMessage(chatId, '⏰ Auto-sending stopped due to no active chats in Firebase.');
         }
       }
@@ -410,7 +415,7 @@ const quizes = () => async (ctx: Context) => {
     }
 
     const chatId = ctx.chat.id.toString();
-    if (intervalIds.has(chatId)) {
+    if (scheduledJobs.has(chatId)) {
       await ctx.reply('⏰ Automatic question sending is already active in this chat.');
       return;
     }
@@ -425,7 +430,7 @@ const quizes = () => async (ctx: Context) => {
 
       await set(ref(db, `settime_groups/${chatId}`), true);
       await startAutoSending(ctx.telegram, chatId, questions);
-      await ctx.reply('⏰ Started sending a random question every minute in this chat.');
+      await ctx.reply('⏰ Started sending a random question every 30 minutes (e.g., 1:00, 1:30) in this chat.');
     } catch (err) {
       debug('Error setting up automatic question sending:', err);
       await ctx.reply('Oops! Failed to set up automatic question sending.');
