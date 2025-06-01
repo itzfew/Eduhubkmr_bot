@@ -16,6 +16,7 @@ import { me } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown } from './commands/pin';
+import { logoCommand } from './commands/logo';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
@@ -118,6 +119,7 @@ bot.command('quote', quote());
 bot.command('quiz', playquiz());
 bot.command('neetcountdown', pin());
 bot.command('stopcountdown', stopCountdown());
+bot.command('gen', logoCommand());
 
 // New command to show user count from Google Sheets
 bot.command('users', async (ctx) => {
