@@ -85,7 +85,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
 
   // Subtle Sparkle Effect
   ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 50; i++) {
     const x = Math.random() * width;
     const y = Math.random() * height;
     ctx.beginPath();
@@ -152,6 +152,16 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   const textX = 650;
   const textY = height / 2 - 100;
 
+  // Decorative Lines Around Text Section
+  ctx.strokeStyle = `${color}80`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(textX - 150, textY - 30);
+  ctx.lineTo(textX + 150, textY - 30);
+  ctx.moveTo(textX - 150, textY + 230);
+  ctx.lineTo(textX + 150, textY + 230);
+  ctx.stroke();
+
   // "DAYS" Text
   ctx.font = `bold 50px "${fontFamily}"`;
   ctx.fillStyle = color;
@@ -175,37 +185,50 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillStyle = '#f1f5f9';
   ctx.fillText('Until May 3, 2026', textX, textY + 190);
 
-  // Curved Quote Text
-  const quoteRadius = 100;
-  const quoteX = width / 2;
-  const quoteY = height - 100;
-  ctx.font = `italic 28px "${fontFamily}"`;
+  // Quote Text with Background Box
+  let quoteFontSize = 30;
+  ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
+  const quoteWords = quote.split(' ');
+  let quoteLines: string[] = [];
+  let currentLine = '';
+  for (const word of quoteWords) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(testLine).width > width * 0.7) {
+      quoteLines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) quoteLines.push(currentLine);
+
+  // Quote Background Box
+  const quoteBoxWidth = width * 0.8;
+  const quoteBoxHeight = quoteLines.length * 40 + 40;
+  const quoteBoxX = width / 2 - quoteBoxWidth / 2;
+  const quoteBoxY = height - quoteBoxHeight - 50;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.beginPath();
+  ctx.roundRect(quoteBoxX, quoteBoxY, quoteBoxWidth, quoteBoxHeight, 20);
+  ctx.fill();
+
+  // Quote Text
   ctx.fillStyle = '#f1f5f9';
   ctx.textAlign = 'center';
-  ctx.save();
-  ctx.translate(quoteX, quoteY);
-  const words = quote.split(' ');
-  let anglePerWord = (Math.PI * 1.5) / words.length;
-  let currentAngle = -Math.PI * 0.75;
-  words.forEach((word) => {
-    ctx.save();
-    ctx.rotate(currentAngle);
-    ctx.fillText(word, 0, -quoteRadius);
-    ctx.restore();
-    currentAngle += anglePerWord;
+  quoteLines.forEach((line, index) => {
+    ctx.fillText(line, width / 2, quoteBoxY + 30 + index * 40);
   });
-  ctx.restore();
 
-  // Decorative Elements
+  // Decorative Arrow
   ctx.fillStyle = secondaryColor;
   ctx.beginPath();
-  ctx.moveTo(width - 120, 60);
-  ctx.lineTo(width - 80, 100);
-  ctx.lineTo(width - 100, 100);
-  ctx.lineTo(width - 100, 140);
-  ctx.lineTo(width - 60, 140);
-  ctx.lineTo(width - 60, 100);
-  ctx.lineTo(width - 80, 100);
+  ctx.moveTo(width - 100, 50);
+  ctx.lineTo(width - 70, 80);
+  ctx.lineTo(width - 85, 80);
+  ctx.lineTo(width - 85, 110);
+  ctx.lineTo(width - 55, 110);
+  ctx.lineTo(width - 55, 80);
+  ctx.lineTo(width - 70, 80);
   ctx.closePath();
   ctx.fill();
 
