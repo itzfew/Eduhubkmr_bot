@@ -2,7 +2,7 @@ import { Context } from 'telegraf';
 import { createCanvas, registerFont } from 'canvas';
 import fs from 'fs';
 import path from 'path';
-import { db, ref, push, set, onValue } from './utils/firebase';
+import { db, ref, push, set, onValue } from '../utils/firebase';
 
 const fontsDir = path.resolve(__dirname, '../assets/fonts');
 const fontFamilies: string[] = [];
