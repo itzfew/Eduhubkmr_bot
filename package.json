@@ -8,6 +8,7 @@
   "dependencies": {
     "@vercel/node": "^3.2.24",
     "axios": "^1.6.8",
+    "date-fns": "^3.6.0",
     "dotenv-cli": "^7.4.2",
     "firebase": "^10.14.1",
     "telegraf": "^4.16.3",
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",
+    "@types/date-fns": "^2.6.0",
     "@types/debug": "^4.1.12",
     "@types/node": "^22.8.6",
     "@vercel/ncc": "^0.38.2",
