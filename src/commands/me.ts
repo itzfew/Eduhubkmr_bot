@@ -2,7 +2,7 @@ import { Context } from 'telegraf';
 import { isPrivateChat } from '../utils/groupSettings';
 
 function formatUserLink(id: number, name: string) {
-  const encodedName = name.replace(//g, '(').replace(//g, ')');
+  const encodedName = name.replace(//g, '\').replace(//g, '\');
   return `[${encodedName}](tg://user?id=${id})`;
 }
 
@@ -51,38 +51,22 @@ export function info() {
         return ctx.reply('Usage: /info <user_id or @username>');
       }
 
-      let userId: number | undefined;
-      let username: string | undefined;
-
-      if (/^@?\w{5,32}$/.test(query)) {
-        username = query.replace('@', '');
-      } else if (/^\d{6,15}$/.test(query)) {
-        userId = parseInt(query);
-      } else {
-        return ctx.reply('Invalid ID or username.');
-      }
-
-      let user;
+      let chat;
       try {
-        if (username) {
-          user = await ctx.telegram.getChat(`@${username}`);
-        } else if (userId) {
-          user = await ctx.telegram.getChat(userId);
-        }
+        chat = await ctx.telegram.getChat(query.startsWith('@') ? query : Number(query));
       } catch (error) {
-        console.error('Error fetching user:', error);
-        return ctx.reply('Could not retrieve user info. The bot may not have access.');
+        console.error('Error fetching chat:', error);
+        return ctx.reply('⚠️ Could not retrieve user info. The user might not have interacted with the bot or doesn’t exist.');
       }
 
-      const name = user.first_name + (user.last_name ? ' ' + user.last_name : '');
-
+      const name = chat.first_name || chat.title || 'N/A';
       const text = `
 👤 *User Info* 👤
 
-🆔 *ID:* \`${user.id}\`
-📛 *Name:* ${formatUserLink(user.id, name)}
-🔖 *Username:* ${user.username ? '@' + user.username : 'None'}
-🌐 *Language:* ${user.language_code || 'Unknown'}
+🆔 *ID:* \`${chat.id}\`
+📛 *Name:* ${formatUserLink(chat.id, name)}
+🔖 *Username:* ${chat.username ? '@' + chat.username : 'None'}
+🌐 *Type:* ${chat.type || 'private'}
 `;
 
       await ctx.reply(text, { parse_mode: 'Markdown' });
