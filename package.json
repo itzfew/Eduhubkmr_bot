@@ -7,17 +7,18 @@
   "homepage": "https://github.com/itzfew/eduhub-bot",
   "dependencies": {
     "@vercel/node": "^3.2.24",
-    "axios": "^1.7.7",
+    "axios": "^1.6.8",
     "date-fns": "^3.6.0",
     "dotenv-cli": "^7.4.2",
     "firebase": "^10.14.1",
     "telegraf": "^4.16.3",
-    "sharp": "^0.33.5",
-    "fastest-levenshtein": "^1.0.16",
-    "node-fetch": "^3.3.2"
+    "fastest-levenshtein": "^1.0.12"
   },
   "devDependencies": {
-    "@types/node": "^20.16.11",
+    "@types/axios": "^0.14.0",
+    "@types/date-fns": "^2.6.0",
+    "@types/debug": "^4.1.12",
+    "@types/node": "^22.8.6",
     "@vercel/ncc": "^0.38.2",
     "debug": "^4.3.7",
     "nodemon": "^3.1.7",
@@ -26,13 +27,10 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
-    "dev": "DEBUG=bot* yarn dotenv -- nodemon -e ts -x ts-node src/index.ts",
-    "devWindows": "@powershell -Command $env:DEBUG='bot*';yarn dotenv -- -- nodemon -e ts -x ts-node src/index.ts",
-    "build": "yarn ncc build src/index.ts -o public -m",
+    "dev": "DEBUG=bot* dotenv -- nodemon -e ts -x ts-node src/index.ts",
+    "devWindows": "@powershell -Command $env:DEBUG='bot*';dotenv -- -- nodemon -e ts -x ts-node src/index.ts",
+    "build": "ncc build src/index.ts -o public -m",
     "prettier": "prettier --write 'src/**/*.ts'",
     "lint": "tsc --noemit"
-  },
-  "engines": {
-    "node": "18.x"
   }
 }
