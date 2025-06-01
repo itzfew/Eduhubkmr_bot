@@ -101,7 +101,9 @@ async function generateLogo(daysText: string, exam: string, targetDate: string):
   bgGradient.addColorStop(0, '#1e293b');
   bgGradient.addColorStop(1, '#475569');
   ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0
+
+, width, height);
 
   // Subtle background pattern (diagonal lines)
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
@@ -247,16 +249,16 @@ const countdownCommand = () => async (ctx: Context) => {
     const text = message.text;
     const userId = message.from?.id;
 
-    // Handle admin command to add countdown
+    // Handle admin command to add/update countdown
     if (userId === ADMIN_ID) {
-      const addMatch = text.match(/^\/subcountdown_(\w+)\s+(\d{2}-\d{2}-\d{4})$/i);
-      if (addMatch) {
-        const [, exam, date] = addMatch;
+      const subMatch = text.match(/^\/sub_(\w+)\s+(\d{2}-\d{2}-\d{4})$/i);
+      if (subMatch) {
+        const [, exam, date] = subMatch;
         const [day, month, year] = date.split('-').map(Number);
         // Validate date
         const targetDate = new Date(Date.UTC(year, month - 1, day));
         if (isNaN(targetDate.getTime()) || day < 1 || day > 31 || month < 1 || month > 12) {
-          return ctx.reply('❗ Invalid date format. Use /subcountdown_<exam> DD-MM-YYYY');
+          return ctx.reply('❗ Invalid date format. Use /sub_<exam> DD-MM-YYYY');
         }
         // Save to Firebase
         await set(ref(db, `countdowns/${exam.toLowerCase()}`), date);
@@ -268,13 +270,13 @@ const countdownCommand = () => async (ctx: Context) => {
     // Handle countdown command
     const countdownMatch = text.match(/^\/(\w+)countdown$/i);
     if (!countdownMatch) {
-      return ctx.reply('❗ *Usage:* `/examcountdown` (e.g., /neetcountdown) or, for admin, `/subcountdown_exam DD-MM-YYYY`', { parse_mode: 'Markdown' });
+      return ctx.reply('❗ *Usage:* `/examcountdown` (e.g., /neetcountdown) or, for admin, `/sub_exam DD-MM-YYYY`', { parse_mode: 'Markdown' });
     }
 
     const exam = countdownMatch[1].toLowerCase();
     const targetDate = countdowns[exam];
     if (!targetDate) {
-      return ctx.reply(`❗ No countdown found for ${exam.toUpperCase()}. Admin can add it with /subcountdown_${exam} DD-MM-YYYY`);
+      return ctx.reply(`❗ No countdown found for ${exam.toUpperCase()}. Admin can add it with /sub_${exam} DD-MM-YYYY`);
     }
 
     const countdownText = calculateDaysUntilTarget(targetDate);
