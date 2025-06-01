@@ -95,25 +95,14 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   const circleX = 350;
   const circleY = height / 2 - 50;
   const circleRadius = 150;
-
-  // Circular gradient background for days text
-  const circleGradient = ctx.createRadialGradient(circleX, circleY, 0, circleX, circleY, circleRadius);
-  circleGradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
-  circleGradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
-  ctx.beginPath();
-  ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
-  ctx.fillStyle = circleGradient;
-  ctx.fill();
-
-  // Stopwatch border
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.lineWidth = 20;
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = '#ffffff'; // White border for contrast
   ctx.stroke();
 
   // Glow effect around circle
-  ctx.shadowColor = `${color}80`;
+  ctx.shadowColor = `${color}80`; // Semi-transparent primary color
   ctx.shadowBlur = 25;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
@@ -139,7 +128,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
     fontSize -= 2;
     ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   }
-  ctx.fillStyle = color;
+  ctx.fillStyle = '#ffffff'; // White for high contrast
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -172,84 +161,47 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.closePath();
   ctx.fill();
 
-  // Inner shadow for ribbon
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetX = 4;
-  ctx.shadowOffsetY = 4;
+  // Glow effect for ribbon
+  ctx.shadowColor = `${color}66`; // Semi-transparent primary color
+  ctx.shadowBlur = 20;
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
 
   // "DAYS" text on ribbon
   ctx.font = `bold 48px "${fontFamily}"`;
-  ctx.fillStyle = color;
+  ctx.fillStyle = '#ffffff'; // White for high contrast
   ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
-  // "LEFT" text with gradient background
-  const leftText = 'LEFT';
+  // "LEFT" text
   ctx.font = `extrabold 90px "${fontFamily}"`;
-  const leftWidth = ctx.measureText(leftText).width;
-  const leftX = ribbonX + ribbonWidth / 2;
-  const leftY = ribbonY + ribbonHeight + 80;
-  const leftBgWidth = leftWidth + 40;
-  const leftBgHeight = 100;
-  const leftGradient = ctx.createLinearGradient(leftX - leftBgWidth / 2, leftY - leftBgHeight / 2, leftX + leftBgWidth / 2, leftY + leftBgHeight / 2);
-  leftGradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
-  leftGradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
-  ctx.fillStyle = leftGradient;
-  ctx.fillRect(leftX - leftBgWidth / 2, leftY - leftBgHeight / 2, leftBgWidth, leftBgHeight);
-  ctx.fillStyle = color;
-  ctx.fillText(leftText, leftX, leftY);
+  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
 
-  // "Until May 3, 2026" text with underline
-  const untilText = 'Until May 3, 2026';
+  // "Until May 3, 2026" text
   ctx.font = `italic 36px "${fontFamily}"`;
-  const untilWidth = ctx.measureText(untilText).width;
-  const untilX = ribbonX + ribbonWidth / 2;
-  const untilY = ribbonY + ribbonHeight + 140;
-  ctx.fillStyle = color;
-  ctx.fillText(untilText, untilX, untilY);
-  ctx.beginPath();
-  ctx.moveTo(untilX - untilWidth / 2, untilY + 10);
-  ctx.lineTo(untilX + untilWidth / 2, untilY + 10);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = color;
-  ctx.stroke();
+  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
+  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
 
-  // Quote text with semi-transparent background
+  // Quote text
   let quoteFontSize = 32;
   ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
   const quoteWords = quote.split(' ');
   let quoteLines: string[] = [];
   let currentLine = '';
-  let maxQuoteWidth = 0;
   for (const word of quoteWords) {
     const testLine = currentLine ? `${currentLine} ${word}` : word;
     ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
     if (ctx.measureText(testLine).width > width * 0.75) {
       quoteLines.push(currentLine);
-      maxQuoteWidth = Math.max(maxQuoteWidth, ctx.measureText(currentLine).width);
       currentLine = word;
     } else {
       currentLine = testLine;
     }
   }
-  if (currentLine) {
-    quoteLines.push(currentLine);
-    maxQuoteWidth = Math.max(maxQuoteWidth, ctx.measureText(currentLine).width);
-  }
+  if (currentLine) quoteLines.push(currentLine);
 
+  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
   const quoteY = height - 120;
-  const quoteBgWidth = maxQuoteWidth + 40;
-  const quoteBgHeight = quoteLines.length * 40 + 20;
-  const quoteBgX = width / 2 - quoteBgWidth / 2;
-  const quoteBgY = quoteY - 30;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-  ctx.fillRect(quoteBgX, quoteBgY, quoteBgWidth, quoteBgHeight);
-
-  ctx.fillStyle = color;
   quoteLines.forEach((line, index) => {
     ctx.fillText(line, width / 2, quoteY + index * 40);
   });
