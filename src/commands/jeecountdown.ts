@@ -1,10 +1,10 @@
 import { Context } from 'telegraf';
-import { createCanvas, loadImage } from 'canvas';
+import { createCanvas } from 'canvas';
 import { differenceInDays, differenceInHours, differenceInMinutes, differenceInMonths } from 'date-fns';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Target date: May 3, 2025, 00:00:00
+// Target date: May 3, 2025, 00:00:00 UTC
 const TARGET_DATE = new Date('2025-05-03T00:00:00Z');
 
 export function jeecountdown() {
@@ -39,12 +39,10 @@ export function jeecountdown() {
       // Hours and Minutes (smaller font)
       context.font = 'bold 40px Arial';
       context.fillStyle = '#ffd700'; // Gold for secondary text
-      context.fillText(`${hoursLeft} hours彼此
+      context.fillText(`${hoursLeft} hours : ${minutesLeft} minutes`, canvas.width / 2, 260);
 
-System: hours : ${minutesLeft} minutes`, canvas.width / 2, 260);
-
-      // Save image to a temporary file
-      const imagePath = path.join(__dirname, 'jeecountdown.png');
+      // Save image to a temporary file in Vercel's /tmp directory
+      const imagePath = path.join('/tmp', `jeecountdown-${Date.now()}.png`);
       const buffer = canvas.toBuffer('image/png');
       await fs.writeFile(imagePath, buffer);
 
