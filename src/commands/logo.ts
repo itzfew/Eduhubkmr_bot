@@ -93,12 +93,12 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
 
   // Stopwatch circle
   const circleX = 350;
-  const circleY = height / 2 - 100;
+  const circleY = height / 2 - 50;
   const circleRadius = 150;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.lineWidth = 20;
-  ctx.strokeStyle = '#000000';
+  ctx.strokeStyle = '#ffffff'; // White border for high contrast
   ctx.stroke();
 
   // Glow effect around circle
@@ -110,7 +110,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Orange dots (clock markers)
+  // Colored dots (clock markers)
   for (let i = 0; i < 12; i++) {
     const angle = i * 30 * (Math.PI / 180);
     const dotX = circleX + Math.cos(angle) * (circleRadius - 25);
@@ -169,17 +169,17 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
 
   // "DAYS" text on ribbon
   ctx.font = `bold 48px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#ffffff'; // White for high contrast
   ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
   // "LEFT" text
   ctx.font = `extrabold 90px "${fontFamily}"`;
-  ctx.fillStyle = '#000000';
+  ctx.fillStyle = '#ffffff'; // White for high contrast
   ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
 
   // "Until May 3, 2026" text
   ctx.font = `italic 36px "${fontFamily}"`;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
   ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
 
   // Quote text
@@ -200,7 +200,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   }
   if (currentLine) quoteLines.push(currentLine);
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
   const quoteY = height - 120;
   quoteLines.forEach((line, index) => {
     ctx.fillText(line, width / 2, quoteY + index * 40);
