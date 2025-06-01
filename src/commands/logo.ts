@@ -298,3 +298,8 @@ function registerCountdownCommands(bot: Telegraf<Context>) {
 const setupCountdownCommands = (bot: Telegraf<Context>) => {
   // Register admin command
   bot.command(/submitcountdown_.+/i, handleSubmitCountdown);
+  // Register dynamic countdown commands
+  registerCountdownCommands(bot);
+};
+
+export { logoCommand };
