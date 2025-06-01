@@ -74,79 +74,70 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   const { primary: color, secondary: secondaryColor } = getRandomColor();
   const quote = getRandomQuote();
 
-  // Background gradient
-  const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+  // Enhanced Background Gradient
+  const bgGradient = ctx.createLinearGradient(0, 0, width, height);
   bgGradient.addColorStop(0, '#1e293b');
+  bgGradient.addColorStop(0.5, '#334155');
   bgGradient.addColorStop(1, '#475569');
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  // Enhanced background graphics: Diagonal lines and subtle stars
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-  ctx.lineWidth = 1;
-  for (let i = -height; i < width + height; i += 30) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + height, height);
-    ctx.stroke();
-  }
-
-  // Add subtle star-like sparkles
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  for (let i = 0; i < 20; i++) {
+  // Subtle Star Pattern
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+  for (let i = 0; i < 50; i++) {
     const x = Math.random() * width;
     const y = Math.random() * height;
     ctx.beginPath();
-    ctx.arc(x, y, 2, 0, 2 * Math.PI);
+    ctx.arc(x, y, Math.random() * 2 + 1, 0, 2 * Math.PI);
     ctx.fill();
   }
 
-  // Stopwatch circle
+  // Stopwatch Circle
   const circleX = 350;
-  const circleY = height / 2 - 50;
+  const circleY = height / 2;
   const circleRadius = 150;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.lineWidth = 20;
-  ctx.strokeStyle = '#ffffff'; // White border for contrast
+  ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  // Glow effect around circle
-  ctx.shadowColor = `${color}80`; // Semi-transparent primary color
-  ctx.shadowBlur = 25;
+  // Glow Effect for Circle
+  ctx.shadowColor = `${color}80`;
+  ctx.shadowBlur = 30;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.strokeStyle = color;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Colored dots (clock markers)
+  // Colored Clock Markers
   for (let i = 0; i < 12; i++) {
     const angle = i * 30 * (Math.PI / 180);
     const dotX = circleX + Math.cos(angle) * (circleRadius - 25);
     const dotY = circleY + Math.sin(angle) * (circleRadius - 25);
     ctx.beginPath();
     ctx.arc(dotX, dotY, 6, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
+    ctx.fillStyle = secondaryColor;
     ctx.fill();
   }
 
-  // Center text (days)
+  // Center Text (Days)
   let fontSize = 120;
   ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   while (ctx.measureText(daysText).width > circleRadius * 1.6 && fontSize > 30) {
     fontSize -= 2;
     ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   }
-  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
   ctx.shadowBlur = 15;
-  ctx.fillText(daysText, circleX, circleY);
+  ctx.fillText(daysText, circleX, circleY - 20); // Slight offset for balance
   ctx.shadowBlur = 0;
 
-  // Stopwatch knobs
+  // Stopwatch Knobs
   ctx.fillStyle = color;
   ctx.fillRect(circleX - 35, circleY - circleRadius - 30, 70, 35); // Top knob
   ctx.fillStyle = secondaryColor;
@@ -156,10 +147,10 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillRect(-25, -25, 50, 25);
   ctx.restore();
 
-  // Main ribbon for "DAYS"
+  // Ribbon for "DAYS"
   const ribbonX = 650;
-  const ribbonY = height / 2 - 100;
-  const ribbonWidth = 280;
+  const ribbonY = height / 2 - 120;
+  const ribbonWidth = 300;
   const ribbonHeight = 80;
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -171,54 +162,36 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.closePath();
   ctx.fill();
 
-  // Glow effect for main ribbon
-  ctx.shadowColor = `${color}66`; // Semi-transparent primary color
+  // Glow Effect for Ribbon
+  ctx.shadowColor = `${color}66`;
   ctx.shadowBlur = 20;
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // "DAYS" text on main ribbon
+  // "DAYS" Text on Ribbon
   ctx.font = `bold 48px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
-  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2 + 15);
 
-  // Additional ribbon for "For NEET"
-  const neetRibbonX = 650;
-  const neetRibbonY = height / 2 + 50;
-  const neetRibbonWidth = 280;
-  const neetRibbonHeight = 60;
+  // "For NEET" Text
+  ctx.font = `extrabold 60px "${fontFamily}"`;
   ctx.fillStyle = secondaryColor;
-  ctx.beginPath();
-  ctx.moveTo(neetRibbonX, neetRibbonY);
-  ctx.lineTo(neetRibbonX + neetRibbonWidth, neetRibbonY);
-  ctx.lineTo(neetRibbonX + neetRibbonWidth + 40, neetRibbonY + neetRibbonHeight / 2);
-  ctx.lineTo(neetRibbonX + neetRibbonWidth, neetRibbonY + neetRibbonHeight);
-  ctx.lineTo(neetRibbonX, neetRibbonY + neetRibbonHeight);
-  ctx.closePath();
-  ctx.fill();
-
-  // Glow effect for NEET ribbon
-  ctx.shadowColor = `${secondaryColor}66`; // Semi-transparent secondary color
-  ctx.shadowBlur = 15;
-  ctx.fill();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 10;
+  ctx.fillText('For NEET', ribbonX + ribbonWidth / 2, ribbonY - 60);
   ctx.shadowBlur = 0;
 
-  // "For NEET" text on ribbon
-  ctx.font = `bold 36px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
-  ctx.fillText('For NEET', neetRibbonX + neetRibbonWidth / 2, neetRibbonY + neetRibbonHeight / 2);
-
-  // "LEFT" text
+  // "LEFT" Text
   ctx.font = `extrabold 90px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
-  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 120);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 90);
 
-  // "Until May 3, 2026" text
+  // "Until May 3, 2026" Text
   ctx.font = `italic 36px "${fontFamily}"`;
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
-  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 180);
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 150);
 
-  // Quote text
+  // Quote Text
   let quoteFontSize = 32;
   ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
   const quoteWords = quote.split(' ');
@@ -236,36 +209,28 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   }
   if (currentLine) quoteLines.push(currentLine);
 
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
-  const quoteY = height - 120;
+  ctx.fillStyle = '#f1f5f9';
+  const quoteY = height - 150;
   quoteLines.forEach((line, index) => {
     ctx.fillText(line, width / 2, quoteY + index * 40);
   });
 
-  // Additional decorative ribbon (top left corner)
-  const topRibbonX = 50;
-  const topRibbonY = 50;
-  const topRibbonWidth = 200;
-  const topRibbonHeight = 50;
+  // Motivational Arrow Graphic
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(topRibbonX, topRibbonY);
-  ctx.lineTo(topRibbonX + topRibbonWidth, topRibbonY);
-  ctx.lineTo(topRibbonX + topRibbonWidth + 30, topRibbonY + topRibbonHeight / 2);
-  ctx.lineTo(topRibbonX + topRibbonWidth, topRibbonY + topRibbonHeight);
-  ctx.lineTo(topRibbonX, topRibbonY + topRibbonHeight);
+  ctx.moveTo(width - 150, 50);
+  ctx.lineTo(width - 100, 100);
+  ctx.lineTo(width - 120, 100);
+  ctx.lineTo(width - 120, 150);
+  ctx.lineTo(width - 80, 150);
+  ctx.lineTo(width - 80, 100);
+  ctx.lineTo(width - 100, 100);
   ctx.closePath();
   ctx.fill();
 
-  // Glow effect for top ribbon
-  ctx.shadowColor = `${color}66`;
-  ctx.shadowBlur = 15;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Decorative border
+  // Decorative Border
   ctx.strokeStyle = color;
-  ctx.lineWidth = 8;
+  ctx.lineWidth = 10;
   ctx.strokeRect(20, 20, width - 40, height - 40);
 
   return { buffer: canvas.toBuffer('image/png'), fontUsed: fontFamily, quoteUsed: quote };
@@ -275,21 +240,23 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
 const logoCommand = () => async (ctx: Context) => {
   try {
     const message = ctx.message;
-    const text = 'text' in message ? message.text : '';
+    const text = message?.text || '';
     const match = text.match(/^\/countdown\b/i);
 
     if (!match) {
-      return ctx.reply('❗ *Usage:* `/countdown` to generate a countdown image until May 3, 2026', { parse_mode: 'Markdown' });
+      return ctx.reply('❗ *Usage:* `/countdown` to generate a countdown image until May 3, 2026 for NEET', { parse_mode: 'Markdown' });
     }
 
     const countdownText = calculateDaysUntilTarget();
     const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText);
 
-    await ctx.replyWithPhoto({ source: buffer }, {
-      caption: `🖼️ *Days until May 3, 2026 for NEET!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
-      parse_mode: 'Markdown',
-    });
-
+    await ctx.replyWithPhoto(
+      { source: buffer },
+      {
+        caption: `🖼️ *Days until May 3, 2026 for NEET!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+        parse_mode: 'Markdown',
+      }
+    );
   } catch (err) {
     console.error('⚠️ Logo generation error:', err);
     await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
