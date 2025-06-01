@@ -32,7 +32,7 @@ function getRandomColor(): { primary: string; secondary: string } {
     { primary: '#dc2626', secondary: '#f87171' }, // Red
     { primary: '#16a34a', secondary: '#4ade80' }, // Green
     { primary: '#2563eb', secondary: '#60a5fa' }, // Blue
-    { primary: '#d946ef', secondary: '#f472b6' }  // Purple
+    { primary: '#d946ef', secondary: '#f472b6' }, // Purple
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 }
@@ -46,7 +46,7 @@ function getRandomQuote(): string {
     "Make today so awesome that yesterday gets jealous.",
     "Your time is now. Seize it!",
     "Dream big, work hard, stay focused.",
-    "The only limit is your imagination."
+    "The only limit is your imagination.",
   ];
   return quotes[Math.floor(Math.random() * quotes.length)];
 }
@@ -81,7 +81,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  // Subtle background pattern (diagonal lines)
+  // Enhanced background graphics: Diagonal lines and subtle stars
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
   ctx.lineWidth = 1;
   for (let i = -height; i < width + height; i += 30) {
@@ -89,6 +89,16 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
     ctx.moveTo(i, 0);
     ctx.lineTo(i + height, height);
     ctx.stroke();
+  }
+
+  // Add subtle star-like sparkles
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  for (let i = 0; i < 20; i++) {
+    const x = Math.random() * width;
+    const y = Math.random() * height;
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, 2 * Math.PI);
+    ctx.fill();
   }
 
   // Stopwatch circle
@@ -146,7 +156,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillRect(-25, -25, 50, 25);
   ctx.restore();
 
-  // Ribbon for "DAYS"
+  // Main ribbon for "DAYS"
   const ribbonX = 650;
   const ribbonY = height / 2 - 100;
   const ribbonWidth = 280;
@@ -161,32 +171,52 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.closePath();
   ctx.fill();
 
-  // Glow effect for ribbon
+  // Glow effect for main ribbon
   ctx.shadowColor = `${color}66`; // Semi-transparent primary color
   ctx.shadowBlur = 20;
   ctx.fill();
   ctx.shadowBlur = 0;
 
-// "DAYS" text on ribbon
-ctx.font = `bold 48px "${fontFamily}"`;
-ctx.fillStyle = '#ffffff'; // White for high contrast
-ctx.textAlign = 'center';
-ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
+  // "DAYS" text on main ribbon
+  ctx.font = `bold 48px "${fontFamily}"`;
+  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
-// "LEFT" text
-ctx.font = `extrabold 90px "${fontFamily}"`;
-ctx.fillStyle = '#ffffff'; // White for high contrast
-ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
+  // Additional ribbon for "For NEET"
+  const neetRibbonX = 650;
+  const neetRibbonY = height / 2 + 50;
+  const neetRibbonWidth = 280;
+  const neetRibbonHeight = 60;
+  ctx.fillStyle = secondaryColor;
+  ctx.beginPath();
+  ctx.moveTo(neetRibbonX, neetRibbonY);
+  ctx.lineTo(neetRibbonX + neetRibbonWidth, neetRibbonY);
+  ctx.lineTo(neetRibbonX + neetRibbonWidth + 40, neetRibbonY + neetRibbonHeight / 2);
+  ctx.lineTo(neetRibbonX + neetRibbonWidth, neetRibbonY + neetRibbonHeight);
+  ctx.lineTo(neetRibbonX, neetRibbonY + neetRibbonHeight);
+  ctx.closePath();
+  ctx.fill();
 
-// "FOR NEET" text (in aqua #3498db)
-ctx.font = `bold 40px "${fontFamily}"`;
-ctx.fillStyle = '#3498db'; // Aqua blue for NEET highlight
-ctx.fillText('FOR NEET', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 30);
+  // Glow effect for NEET ribbon
+  ctx.shadowColor = `${secondaryColor}66`; // Semi-transparent secondary color
+  ctx.shadowBlur = 15;
+  ctx.fill();
+  ctx.shadowBlur = 0;
 
-// "Until May 3, 2026" text
-ctx.font = `italic 36px "${fontFamily}"`;
-ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
-ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
+  // "For NEET" text on ribbon
+  ctx.font = `bold 36px "${fontFamily}"`;
+  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillText('For NEET', neetRibbonX + neetRibbonWidth / 2, neetRibbonY + neetRibbonHeight / 2);
+
+  // "LEFT" text
+  ctx.font = `extrabold 90px "${fontFamily}"`;
+  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 120);
+
+  // "Until May 3, 2026" text
+  ctx.font = `italic 36px "${fontFamily}"`;
+  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
+  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 180);
 
   // Quote text
   let quoteFontSize = 32;
@@ -212,6 +242,27 @@ ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHei
     ctx.fillText(line, width / 2, quoteY + index * 40);
   });
 
+  // Additional decorative ribbon (top left corner)
+  const topRibbonX = 50;
+  const topRibbonY = 50;
+  const topRibbonWidth = 200;
+  const topRibbonHeight = 50;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(topRibbonX, topRibbonY);
+  ctx.lineTo(topRibbonX + topRibbonWidth, topRibbonY);
+  ctx.lineTo(topRibbonX + topRibbonWidth + 30, topRibbonY + topRibbonHeight / 2);
+  ctx.lineTo(topRibbonX + topRibbonWidth, topRibbonY + topRibbonHeight);
+  ctx.lineTo(topRibbonX, topRibbonY + topRibbonHeight);
+  ctx.closePath();
+  ctx.fill();
+
+  // Glow effect for top ribbon
+  ctx.shadowColor = `${color}66`;
+  ctx.shadowBlur = 15;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
   // Decorative border
   ctx.strokeStyle = color;
   ctx.lineWidth = 8;
@@ -224,7 +275,7 @@ ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHei
 const logoCommand = () => async (ctx: Context) => {
   try {
     const message = ctx.message;
-    const text = message?.text || '';
+    const text = 'text' in message ? message.text : '';
     const match = text.match(/^\/countdown\b/i);
 
     if (!match) {
@@ -235,9 +286,10 @@ const logoCommand = () => async (ctx: Context) => {
     const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText);
 
     await ctx.replyWithPhoto({ source: buffer }, {
-      caption: `🖼️ *Days until May 3, 2026!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+      caption: `🖼️ *Days until May 3, 2026 for NEET!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
       parse_mode: 'Markdown',
     });
+
   } catch (err) {
     console.error('⚠️ Logo generation error:', err);
     await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
