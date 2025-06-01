@@ -16,7 +16,7 @@ import { me } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown } from './commands/pin';
-import { countdownCommand } from './commands/countdown;
+import { countdownCommand } from './commands/countdown';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
