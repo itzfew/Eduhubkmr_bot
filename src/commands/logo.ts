@@ -1,12 +1,25 @@
+// src/commands/countdown.ts
 import { Context } from 'telegraf';
 import { createCanvas, registerFont } from 'canvas';
 import fs from 'fs';
 import path from 'path';
 import { db, ref, set, onValue } from '../utils/firebase';
 
+// Admin ID
+const ADMIN_ID = 6930703214;
+
+// Store countdowns from Firebase
+let countdowns: { [key: string]: string } = {};
+
+// Load countdowns from Firebase on startup
+onValue(ref(db, 'countdowns'), (snapshot) => {
+  countdowns = snapshot.val() || {};
+}, {
+  onlyOnce: false // Keep listening for updates
+});
+
 const fontsDir = path.resolve(__dirname, '../assets/fonts');
 const fontFamilies: string[] = [];
-const ADMIN_ID = 6930703214;
 
 // Register fonts
 fs.readdirSync(fontsDir).forEach((file) => {
@@ -53,27 +66,9 @@ function getRandomQuote(): string {
   return quotes[Math.floor(Math.random() * quotes.length)];
 }
 
-function parseDate(dateStr: string): string | null {
-  const match = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (!match) return null;
-  const [_, day, month, year] = match;
-  const isoDate = `${year}-${month}-${day}T00:00:00Z`;
-  const date = new Date(isoDate);
-  return isNaN(date.getTime()) ? null : isoDate;
-}
-
-async function getCountdownDate(exam: 'neet' | 'jee'): Promise<string | null> {
-  return new Promise((resolve) => {
-    const dateRef = ref(db, `/countdowns/${exam}`);
-    onValue(dateRef, (snapshot) => {
-      const date = snapshot.val();
-      resolve(date || null);
-    }, { onlyOnce: true });
-  });
-}
-
 function calculateDaysUntilTarget(targetDateStr: string): string {
-  const targetDate = new Date(targetDateStr);
+  const [day, month, year] = targetDateStr.split('-').map(Number);
+  const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
   const now = new Date();
   const diffMs = targetDate.getTime() - now.getTime();
 
@@ -85,16 +80,13 @@ function calculateDaysUntilTarget(targetDateStr: string): string {
   return `${diffDays}`;
 }
 
-function formatDateForDisplay(targetDateStr: string): string {
-  const date = new Date(targetDateStr);
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  });
+function formatDate(dateStr: string): string {
+  const [day, month, year] = dateStr.split('-');
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-async function generateLogo(daysText: string, exam: 'neet' | 'jee', targetDateStr: string): Promise<{ buffer: Buffer, fontUsed: string, quoteUsed: string }> {
+async function generateLogo(daysText: string, exam: string, targetDate: string): Promise<{ buffer: Buffer, fontUsed: string, quoteUsed: string }> {
   const width = 1200;
   const height = 900; // 4:3 aspect ratio
   const canvas = createCanvas(width, height);
@@ -168,7 +160,7 @@ async function generateLogo(daysText: string, exam: 'neet' | 'jee', targetDateSt
 
   // Stopwatch knobs
   ctx.fillStyle = color;
-  ctx.fillRect(circleX - 35, circleY - circleRadius - 30, 70, 35); // Top knob
+  ctx.fillRect(circleX - 35, circleY - circleRadius - 30, 70, 35);
   ctx.fillStyle = secondaryColor;
   ctx.save();
   ctx.translate(circleX - circleRadius - 20, circleY - circleRadius + 20);
@@ -176,7 +168,7 @@ async function generateLogo(daysText: string, exam: 'neet' | 'jee', targetDateSt
   ctx.fillRect(-25, -25, 50, 25);
   ctx.restore();
 
-  // Ribbon for "DAYS"
+  // Ribbon for exam name
   const ribbonX = 650;
   const ribbonY = height / 2 - 100;
   const ribbonWidth = 280;
@@ -197,21 +189,20 @@ async function generateLogo(daysText: string, exam: 'neet' | 'jee', targetDateSt
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // "DAYS" text on ribbon
+  // Exam name on ribbon
   ctx.font = `bold 48px "${fontFamily}"`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
+  ctx.fillText(exam.toUpperCase(), ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
   // "LEFT" text
   ctx.font = `extrabold 90px "${fontFamily}"`;
   ctx.fillStyle = '#ffffff';
   ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
 
-  // "Until <date>" text
-  const displayDate = formatDateForDisplay(targetDateStr);
+  // "Until [date]" text
   ctx.font = `italic 36px "${fontFamily}"`;
   ctx.fillStyle = '#f1f5f9';
-  ctx.fillText(`Until ${displayDate}`, ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
+  ctx.fillText(`Until ${formatDate(targetDate)}`, ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
 
   // Quote text
   let quoteFontSize = 32;
@@ -246,63 +237,57 @@ async function generateLogo(daysText: string, exam: 'neet' | 'jee', targetDateSt
 }
 
 // Telegraf Command
-const logoCommand = () => async (ctx: Context) => {
+const countdownCommand = () => async (ctx: Context) => {
   try {
     const message = ctx.message;
     if (!('text' in message)) {
       return ctx.reply('❗ Please send a valid command.');
     }
 
-    const userId = message.from.id;
-    const text = message.text || '';
-    const neetMatch = text.match(/^\/neetcountdown\b/i);
-    const jeeMatch = text.match(/^\/jeecountdown\b/i);
-    const addNeetMatch = text.match(/^\/addcountdown_neet\s+(\d{2}-\d{2}-\d{4})$/i);
-    const addJeeMatch = text.match(/^\/addcountdown_jee\s+(\d{2}-\d{2}-\d{4})$/i);
+    const text = message.text;
+    const userId = message.from?.id;
 
-    if (addNeetMatch && userId === ADMIN_ID) {
-      const dateStr = parseDate(addNeetMatch[1]);
-      if (!dateStr) {
-        return ctx.reply('❗ Invalid date format. Use `/addcountdown_neet dd-mm-yyyy`', { parse_mode: 'Markdown' });
+    // Handle admin command to add countdown
+    if (userId === ADMIN_ID) {
+      const addMatch = text.match(/^\/addcountdown_(\w+)\s+(\d{2}-\d{2}-\d{4})$/i);
+      if (addMatch) {
+        const [, exam, date] = addMatch;
+        const [day, month, year] = date.split('-').map(Number);
+        // Validate date
+        const targetDate = new Date(Date.UTC(year, month - 1, day));
+        if (isNaN(targetDate.getTime()) || day < 1 || day > 31 || month < 1 || month > 12) {
+          return ctx.reply('❗ Invalid date format. Use /addcountdown_<exam> DD-MM-YYYY');
+        }
+        // Save to Firebase
+        await set(ref(db, `countdowns/${exam.toLowerCase()}`), date);
+        countdowns[exam.toLowerCase()] = date; // Update local cache
+        return ctx.reply(`✅ Countdown for ${exam.toUpperCase()} set to ${date}`);
       }
-      await set(ref(db, '/countdowns/neet'), dateStr);
-      return ctx.reply(`✅ NEET countdown set to ${addNeetMatch[1]}`);
-    } else if (addJeeMatch && userId === ADMIN_ID) {
-      const dateStr = parseDate(addJeeMatch[1]);
-      if (!dateStr) {
-        return ctx.reply('❗ Invalid date format. Use `/addcountdown_jee dd-mm-yyyy`', { parse_mode: 'Markdown' });
-      }
-      await set(ref(db, '/countdowns/jee'), dateStr);
-      return ctx.reply(`✅ JEE countdown set to ${addJeeMatch[1]}`);
-    } else if (neetMatch) {
-      const targetDate = await getCountdownDate('neet');
-      if (!targetDate) {
-        return ctx.reply('❗ No NEET countdown date set. Admin can set it with `/addcountdown_neet dd-mm-yyyy`', { parse_mode: 'Markdown' });
-      }
-      const countdownText = calculateDaysUntilTarget(targetDate);
-      const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, 'neet', targetDate);
-      await ctx.replyWithPhoto({ source: buffer }, {
-        caption: `🖼️ *Days until NEET ${formatDateForDisplay(targetDate)}!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
-        parse_mode: 'Markdown',
-      });
-    } else if (jeeMatch) {
-      const targetDate = await getCountdownDate('jee');
-      if (!targetDate) {
-        return ctx.reply('❗ No JEE countdown date set. Admin can set it with `/addcountdown_jee dd-mm-yyyy`', { parse_mode: 'Markdown' });
-      }
-      const countdownText = calculateDaysUntilTarget(targetDate);
-      const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, 'jee', targetDate);
-      await ctx.replyWithPhoto({ source: buffer }, {
-        caption: `🖼️ *Days until JEE ${formatDateForDisplay(targetDate)}!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
-        parse_mode: 'Markdown',
-      });
-    } else {
-      return ctx.reply('❗ *Usage:* `/neetcountdown` or `/jeecountdown` for countdowns\nAdmin: `/addcountdown_neet dd-mm-yyyy` or `/addcountdown_jee dd-mm-yyyy`', { parse_mode: 'Markdown' });
     }
+
+    // Handle countdown command
+    const countdownMatch = text.match(/^\/(\w+)countdown$/i);
+    if (!countdownMatch) {
+      return ctx.reply('❗ *Usage:* `/examcountdown` (e.g., /neetcountdown) or, for admin, `/addcountdown_exam DD-MM-YYYY`', { parse_mode: 'Markdown' });
+    }
+
+    const exam = countdownMatch[1].toLowerCase();
+    const targetDate = countdowns[exam];
+    if (!targetDate) {
+      return ctx.reply(`❗ No countdown found for ${exam.toUpperCase()}. Admin can add it with /addcountdown_${exam} DD-MM-YYYY`);
+    }
+
+    const countdownText = calculateDaysUntilTarget(targetDate);
+    const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, exam, targetDate);
+
+    await ctx.replyWithPhoto({ source: buffer }, {
+      caption: `🖼️ *Days until ${exam.toUpperCase()} ${formatDate(targetDate)}!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+      parse_mode: 'Markdown',
+    });
   } catch (err) {
-    console.error('⚠️ Logo generation error:', err);
+    console.error('⚠️ Countdown generation error:', err);
     await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
   }
 };
 
-export { logoCommand };
+export { countdownCommand };
