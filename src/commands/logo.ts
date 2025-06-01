@@ -44,100 +44,96 @@ function calculateDaysUntilTarget(): string {
   }
 
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  return `${diffDays} Days`;
+  return `${diffDays}`;
 }
 
-function splitText(text: string): [string, string, string] {
-  const words = text.trim().split(/\s+/);
-  let mainText = words.join(' ');
-  return [mainText, 'Until', 'May 3, 2026'];
-}
-
-async function generateLogo(text: string): Promise<{ buffer: Buffer, fontUsed: string }> {
+async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUsed: string }> {
   const width = 1000;
-  const height = 500; // Increased height for subtitle
+  const height = 500;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
   const fontFamily = getRandomFont();
 
-  // Background gradient
-  const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, '#0f172a');
-  bgGradient.addColorStop(1, '#1e293b');
-  ctx.fillStyle = bgGradient;
+  // Background
+  ctx.fillStyle = '#ffffff'; // White background as in HTML
   ctx.fillRect(0, 0, width, height);
 
-  // Subtle pattern (diagonal lines)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-  ctx.lineWidth = 1;
-  for (let i = -height; i < width + height; i += 20) {
+  // Stopwatch circle
+  const circleX = 300; // Left side for stopwatch
+  const circleY = height / 2;
+  const circleRadius = 128;
+  ctx.beginPath();
+  ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
+  ctx.lineWidth = 20; // Border thickness
+  ctx.strokeStyle = '#000000';
+  ctx.stroke();
+
+  // Orange dots (clock markers)
+  for (let i = 0; i < 12; i++) {
+    const angle = i * 30 * (Math.PI / 180);
+    const dotX = circleX + Math.cos(angle) * (circleRadius - 20);
+    const dotY = circleY + Math.sin(angle) * (circleRadius - 20);
     ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + height, height);
-    ctx.stroke();
+    ctx.arc(dotX, dotY, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = '#f59e0b'; // Orange
+    ctx.fill();
   }
 
-  // Split text
-  const [mainText, subtitle1, subtitle2] = splitText(text);
-
-  // Auto-size main text
-  let mainFontSize = 120;
-  ctx.font = `bold ${mainFontSize}px "${fontFamily}"`;
-  while (ctx.measureText(mainText).width > width * 0.8 && mainFontSize > 20) {
-    mainFontSize -= 2;
-    ctx.font = `bold ${mainFontSize}px "${fontFamily}"`;
+  // Center text (days)
+  let fontSize = 100;
+  ctx.font = `bold ${fontSize}px "${fontFamily}"`;
+  while (ctx.measureText(daysText).width > circleRadius * 1.5 && fontSize > 20) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   }
-
-  // Text styling
+  ctx.fillStyle = '#f59e0b'; // Orange text
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.fillText(daysText, circleX, circleY);
 
-  // Gradient or solid fill for main text
-  let textFill;
-  if (Math.random() < 0.6) {
-    const gradient = ctx.createLinearGradient(0, 0, width, 0);
-    gradient.addColorStop(0, getRandomTextColor());
-    gradient.addColorStop(1, getRandomTextColor());
-    textFill = gradient;
-  } else {
-    textFill = getRandomTextColor();
-  }
-
-  // Enhanced shadow and glow effect
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-  ctx.shadowBlur = 15;
-  ctx.shadowOffsetX = 4;
-  ctx.shadowOffsetY = 4;
-
-  // Draw main text with glow
+  // Stopwatch knobs
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillRect(circleX - 24, circleY - circleRadius - 20, 48, 24); // Top knob
+  ctx.fillStyle = '#fb923c'; // Lighter orange
   ctx.save();
-  ctx.translate(width / 2, height / 2 - 50);
-  ctx.fillStyle = textFill;
-  ctx.fillText(mainText.toUpperCase(), 0, 0);
-
-  // Add glow by redrawing with lower opacity
-  ctx.globalAlpha = 0.4;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(mainText.toUpperCase(), 0, 0);
-  ctx.globalAlpha = 1.0;
+  ctx.translate(circleX - circleRadius - 12, circleY - circleRadius + 12);
+  ctx.rotate(-30 * (Math.PI / 180));
+  ctx.fillRect(-16, -16, 32, 16);
   ctx.restore();
 
-  // Subtitle text
-  const subtitleFontSize = Math.min(mainFontSize * 0.4, 40);
-  ctx.font = `bold ${subtitleFontSize}px "${fontFamily}"`;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.shadowBlur = 5;
-  ctx.shadowOffsetX = 2;
-  ctx.shadowOffsetY = 2;
+  // Ribbon for "DAYS"
+  const ribbonX = 550;
+  const ribbonY = height / 2 - 40;
+  const ribbonWidth = 200;
+  const ribbonHeight = 60;
+  ctx.fillStyle = '#f59e0b';
+  ctx.beginPath();
+  ctx.moveTo(ribbonX, ribbonY);
+  ctx.lineTo(ribbonX + ribbonWidth, ribbonY);
+  ctx.lineTo(ribbonX + ribbonWidth + 40, ribbonY + ribbonHeight / 2);
+  ctx.lineTo(ribbonX + ribbonWidth, ribbonY + ribbonHeight);
+  ctx.lineTo(ribbonX, ribbonY + ribbonHeight);
+  ctx.closePath();
+  ctx.fill();
 
-  ctx.fillText(subtitle1.toUpperCase(), width / 2, height / 2 + 50);
-  ctx.fillText(subtitle2.toUpperCase(), width / 2, height / 2 + 90);
+  // "DAYS" text on ribbon
+  ctx.font = `bold 36px "${fontFamily}"`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
-  // Decorative border
-  ctx.strokeStyle = textFill;
-  ctx.lineWidth = 5;
-  ctx.strokeRect(20, 20, width - 40, height - 40);
+  // "LEFT" text
+  ctx.font = `extrabold 72px "${fontFamily}"`;
+  ctx.fillStyle = '#000000';
+  ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 60);
+
+  // Shadow for text
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 4;
+  ctx.shadowOffsetY = 4;
 
   return { buffer: canvas.toBuffer('image/png'), fontUsed: fontFamily };
 }
