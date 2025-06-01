@@ -15,6 +15,7 @@ import { isPrivateChat } from './utils/groupSettings';
 import { me } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
+import { pin, stopCountdown } from './commands/pin';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
@@ -115,6 +116,8 @@ bot.command('groups', groups());
 bot.command(['me', 'user', 'info'], me());
 bot.command('quote', quote());
 bot.command('quiz', playquiz());
+bot.command('neetcountdown', pin());
+bot.command('stopcountdown', stopCountdown());
 
 // New command to show user count from Google Sheets
 bot.command('users', async (ctx) => {
