@@ -1,5 +1,5 @@
 import { Context } from 'telegraf';
-import { db, ref, set, onValue, remove } from '../utils/firebase';
+import { db, ref, set, onValue, remove, off } from '../utils/firebase';
 
 // Target NEET exam date
 const NEET_DATE = new Date('2026-05-03T00:00:00+05:30'); // IST timezone
@@ -13,7 +13,6 @@ const getCountdown = () => {
     return 'NEET 2026 has passed! 🎉';
   }
 
-  // Calculate months, days, and hours
   const msInHour = 1000 * 60 * 60;
   const msInDay = msInHour * 24;
   const msInMonth = msInDay * 30.42; // Average days in a month (365/12)
@@ -78,6 +77,7 @@ const updatePinnedMessage = async (ctx: Context, chatId: number, messageId: numb
     await savePinnedMessage(chatId, messageId); // Update lastUpdated timestamp
   } catch (error) {
     console.error('Error updating pinned message:', error);
+    throw error; // Rethrow to handle in caller
   }
 };
 
@@ -87,83 +87,47 @@ export const pin = () => async (ctx: Context) => {
   const userId = ctx.from?.id;
 
   if (!chatId || !userId) {
-    return ctx.reply('❌ Error: Unable to process command.');
+    await ctx.reply('❌ Error: Unable to process command.');
+    return;
   }
 
   // Check if user is admin in group chats or allow in private chats
   const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
   if (isGroup && !(await isAdmin(ctx, userId, chatId))) {
-    return ctx.reply('🚫 Only group admins can use this command.');
+    await ctx.reply('🚫 Only group admins can use this command.');
+    return;
   }
 
   // Check if a countdown is already active
   const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
-  onValue(
-    pinnedRef,
-    async (snapshot) => {
-      const data = snapshot.val();
-      if (data && data.messageId) {
-        await ctx.reply('⚠️ A countdown is already active in this chat. Use /stopcountdown to stop it first.');
-        return;
-      }
+  try {
+    const snapshot = await new Promise((resolve) => {
+      onValue(pinnedRef, resolve, { onlyOnce: true });
+    });
+    const data = (snapshot as any).val();
 
-      // Send the initial countdown message
-      const sentMessage = await ctx.reply(generateCountdownMessage(), {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[{ text: '🔄 Refresh Countdown', callback_data: 'refresh_countdown' }]],
-        },
-      });
-
-      const messageId = sentMessage.message_id;
-
-      // Pin the message
-      try {
-        await ctx.telegram.pinChatMessage(chatId, messageId, { disable_notification: true });
-      } catch (error) {
-        console.error('Error pinning message:', error);
-        await ctx.reply('❌ Failed to pin the countdown message.');
-        return;
-      }
-
-      // Save pinned message details to Firebase
-      await savePinnedMessage(chatId, messageId);
-    },
-    { onlyOnce: true }
-  );
-
-  // Set up Firebase listener for daily updates
-  onValue(pinnedRef, async (snapshot) => {
-    const data = snapshot.val();
     if (data && data.messageId) {
-      const lastUpdated = data.lastUpdated || 0;
-      const now = Date.now();
-      const oneDayMs = 24 * 60 * 60 * 1000; // One day in milliseconds
-
-      // Check if a day has passed since the last update
-      if (now - lastUpdated >= oneDayMs) {
-        await updatePinnedMessage(ctx, chatId, data.messageId);
-      }
+      await ctx.reply('⚠️ A countdown is already active in this chat. Use /stopcountdown to stop it first.');
+      return;
     }
-  });
 
-  // Handle refresh button
-  ctx.telegram.on('callback_query', async (callbackCtx) => {
-    if (callbackCtx.callbackQuery?.data === 'refresh_countdown') {
-      if (callbackCtx.chat?.id !== chatId) {
-        await callbackCtx.answerCbQuery('🚫 Unauthorized');
-        return;
-      }
+    // Send the initial countdown message
+    const sentMessage = await ctx.reply(generateCountdownMessage(), {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[{ text: '🔄 Refresh Countdown', callback_data: 'refresh_countdown' }]],
+      },
+    });
 
-      try {
-        await updatePinnedMessage(callbackCtx, chatId, callbackCtx.callbackQuery.message?.message_id || 0);
-        await callbackCtx.answerCbQuery('✅ Countdown refreshed!');
-      } catch (error) {
-        console.error('Error refreshing countdown:', error);
-        await callbackCtx.answerCbQuery('❌ Failed to refresh countdown.');
-      }
-    }
-  });
+    const messageId = sentMessage.message_id;
+
+    // Pin the message
+    await ctx.telegram.pinChatMessage(chatId, messageId, { disable_notification: true });
+    await savePinnedMessage(chatId, messageId);
+  } catch (error) {
+    console.error('Error setting up countdown:', error);
+    await ctx.reply('❌ Failed to set up the countdown.');
+  }
 };
 
 // Command to stop the countdown
@@ -172,13 +136,15 @@ export const stopCountdown = () => async (ctx: Context) => {
   const userId = ctx.from?.id;
 
   if (!chatId || !userId) {
-    return ctx.reply('❌ Error: Unable to process command.');
+    await ctx.reply('❌ Error: Unable to process command.');
+    return;
   }
 
   // Check if user is admin in group chats
   const isGroup = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
   if (isGroup && !(await isAdmin(ctx, userId, chatId))) {
-    return ctx.reply('🚫 Only group admins can use this command.');
+    await ctx.reply('🚫 Only group admins can use this command.');
+    return;
   }
 
   // Remove pinned message data from Firebase
@@ -191,4 +157,56 @@ export const stopCountdown = () => async (ctx: Context) => {
     console.error('Error stopping countdown:', error);
     await ctx.reply('❌ Failed to stop the countdown.');
   }
+};
+
+// Set up daily update listener (should be called once during bot initialization)
+export const setupDailyUpdateListener = (bot: any) => {
+  bot.on('callback_query', async (callbackCtx: Context) => {
+    const chatId = callbackCtx.chat?.id;
+    const messageId = callbackCtx.callbackQuery?.message?.message_id;
+
+    if (!chatId || !messageId) {
+      await callbackCtx.answerCbQuery('❌ Error: Invalid context.');
+      return;
+    }
+
+    if (callbackCtx.callbackQuery?.data === 'refresh_countdown') {
+      try {
+        await updatePinnedMessage(callbackCtx, chatId, messageId);
+        await callbackCtx.answerCbQuery('✅ Countdown refreshed!');
+      } catch (error) {
+        await callbackCtx.answerCbQuery('❌ Failed to refresh countdown.');
+      }
+    }
+  });
+
+  // Set up a single Firebase listener for all chats
+  const pinnedMessagesRef = ref(db, 'pinnedMessages');
+  onValue(pinnedMessagesRef, async (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    for (const chatId of Object.keys(data)) {
+      const { messageId, lastUpdated } = data[chatId];
+      if (!messageId || !lastUpdated) continue;
+
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      if (now - lastUpdated >= oneDayMs) {
+        try {
+          const ctx = bot; // Use bot context; ensure it supports telegram methods
+          await updatePinnedMessage(ctx, parseInt(chatId), messageId);
+        } catch (error) {
+          console.error(`Error updating countdown for chat ${chatId}:`, error);
+        }
+      }
+    }
+  });
+};
+
+// Cleanup function to remove listeners (call on bot shutdown)
+export const cleanupListeners = () => {
+  const pinnedMessagesRef = ref(db, 'pinnedMessages');
+  off(pinnedMessagesRef);
 };
