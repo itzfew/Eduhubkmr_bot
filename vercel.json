@@ -1,18 +1,20 @@
 {
   "builds": [
     {
-      "src": "src/index.ts",
+      "src": "public/index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["src/**", "assets/**"],
-        "nodeVersion": "18"
+        "includeFiles": ["public/**", "assets/**"]
       }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "src/index.ts"
+      "dest": "public/index.js"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
