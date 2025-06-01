@@ -1,14 +1,17 @@
-import { Context } from 'telegraf';
+// src/commands/countdown.ts
+import { Context, Telegraf } from 'telegraf';
 import { createCanvas, registerFont } from 'canvas';
 import fs from 'fs';
 import path from 'path';
-import { db, ref, push, set, onValue } from './utils/firebase';
+import { db, ref, set, onValue } from '../utils/firebase';
 
-const fontsDir = path.resolve(__dirname, '../assets/fonts');
-const fontFamilies: string[] = [];
+// Admin ID
 const ADMIN_ID = 6930703214;
 
-// Register fonts
+// Font registration
+const fontsDir = path.resolve(__dirname, '../assets/fonts');
+const fontFamilies: string[] = [];
+
 fs.readdirSync(fontsDir).forEach((file) => {
   const filePath = path.join(fontsDir, file);
   if (fs.statSync(filePath).isFile() && /\.(ttf|otf)$/i.test(file)) {
@@ -34,7 +37,7 @@ function getRandomColor(): { primary: string; secondary: string } {
     { primary: '#dc2626', secondary: '#f87171' }, // Red
     { primary: '#16a34a', secondary: '#4ade80' }, // Green
     { primary: '#2563eb', secondary: '#60a5fa' }, // Blue
-    { primary: '#d946ef', secondary: '#f472b6' }  // Purple
+    { primary: '#d946ef', secondary: '#f472b6' }, // Purple
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 }
@@ -48,29 +51,13 @@ function getRandomQuote(): string {
     "Make today so awesome that yesterday gets jealous.",
     "Your time is now. Seize it!",
     "Dream big, work hard, stay focused.",
-    "The only limit is your imagination."
+    "The only limit is your imagination.",
   ];
   return quotes[Math.floor(Math.random() * quotes.length)];
 }
 
-async function getExamDate(exam: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const countdownRef = ref(db, `countdowns/${exam}`);
-    onValue(countdownRef, (snapshot) => {
-      const data = snapshot.val();
-      resolve(data ? data.date : null);
-    }, { onlyOnce: true });
-  });
-}
-
-async function saveExamDate(exam: string, date: string): Promise<void> {
-  const countdownRef = ref(db, `countdowns/${exam}`);
-  await set(countdownRef, { exam, date });
-}
-
 function calculateDaysUntilTarget(targetDateStr: string): string {
-  const [year, month, day] = targetDateStr.split('-').map(Number);
-  const targetDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+  const targetDate = new Date(targetDateStr + 'T00:00:00Z');
   const now = new Date();
   const diffMs = targetDate.getTime() - now.getTime();
 
@@ -82,9 +69,9 @@ function calculateDaysUntilTarget(targetDateStr: string): string {
   return `${diffDays}`;
 }
 
-async function generateLogo(daysText: string, targetDate: string): Promise<{ buffer: Buffer, fontUsed: string, quoteUsed: string }> {
+async function generateLogo(daysText: string, targetDate: string): Promise<{ buffer: Buffer; fontUsed: string; quoteUsed: string }> {
   const width = 1200;
-  const height = 900; // 4:3 aspect ratio
+  const height = 900;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -116,11 +103,11 @@ async function generateLogo(daysText: string, targetDate: string): Promise<{ buf
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.lineWidth = 20;
-  ctx.strokeStyle = '#ffffff'; // White border for contrast
+  ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
   // Glow effect around circle
-  ctx.shadowColor = `${color}80`; // Semi-transparent primary color
+  ctx.shadowColor = `${color}80`;
   ctx.shadowBlur = 25;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
@@ -146,7 +133,7 @@ async function generateLogo(daysText: string, targetDate: string): Promise<{ buf
     fontSize -= 2;
     ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   }
-  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -156,7 +143,7 @@ async function generateLogo(daysText: string, targetDate: string): Promise<{ buf
 
   // Stopwatch knobs
   ctx.fillStyle = color;
-  ctx.fillRect(circleX - 35, circleY - circleRadius - 30, 70, 35); // Top knob
+  ctx.fillRect(circleX - 35, circleY - circleRadius - 30, 70, 35);
   ctx.fillStyle = secondaryColor;
   ctx.save();
   ctx.translate(circleX - circleRadius - 20, circleY - circleRadius + 20);
@@ -180,25 +167,29 @@ async function generateLogo(daysText: string, targetDate: string): Promise<{ buf
   ctx.fill();
 
   // Glow effect for ribbon
-  ctx.shadowColor = `${color}66`; // Semi-transparent primary color
+  ctx.shadowColor = `${color}66`;
   ctx.shadowBlur = 20;
   ctx.fill();
   ctx.shadowBlur = 0;
 
   // "DAYS" text on ribbon
   ctx.font = `bold 48px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillStyle = '#ffffff';
   ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
   // "LEFT" text
   ctx.font = `extrabold 90px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillStyle = '#ffffff';
   ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
 
-  // "Until [date]" text
-  const formattedDate = targetDate.split('-').reverse().join('-'); // Convert YYYY-MM-DD to DD-MM-YYYY
+  // Target date text (e.g., "Until May 3, 2026")
+  const formattedDate = new Date(targetDate).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
   ctx.font = `italic 36px "${fontFamily}"`;
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
+  ctx.fillStyle = '#f1f5f9';
   ctx.fillText(`Until ${formattedDate}`, ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
 
   // Quote text
@@ -219,7 +210,7 @@ async function generateLogo(daysText: string, targetDate: string): Promise<{ buf
   }
   if (currentLine) quoteLines.push(currentLine);
 
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
+  ctx.fillStyle = '#f1f5f9';
   const quoteY = height - 120;
   quoteLines.forEach((line, index) => {
     ctx.fillText(line, width / 2, quoteY + index * 40);
@@ -233,48 +224,77 @@ async function generateLogo(daysText: string, targetDate: string): Promise<{ buf
   return { buffer: canvas.toBuffer('image/png'), fontUsed: fontFamily, quoteUsed: quote };
 }
 
-// Telegraf Command
-const countdownCommand = () => async (ctx: Context) => {
-  try {
-    const message = ctx.message;
-    const text = message?.text || '';
-    const userId = ctx.from?.id;
+// Function to validate and convert DD-MM-YYYY to YYYY-MM-DD
+function validateAndConvertDate(dateStr: string): string | null {
+  const match = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const date = new Date(`${year}-${month}-${day}T00:00:00Z`);
+  if (isNaN(date.getTime())) return null;
+  return `${year}-${month}-${day}`;
+}
 
-    // Handle admin command: /submitcountdown_[exam] DD-MM-YYYY
-    const submitMatch = text.match(/^\/submitcountdown_(\w+)\s+(\d{2}-\d{2}-\d{4})$/i);
-    if (submitMatch && userId === ADMIN_ID) {
-      const [, exam, date] = submitMatch;
-      const [day, month, year] = date.split('-').map(Number);
-      const formattedDate = `${year}-${month}-${day}`; // Convert to YYYY-MM-DD
-      await saveExamDate(exam.toLowerCase(), formattedDate);
-      return ctx.reply(`✅ Countdown for ${exam.toUpperCase()} set to ${date}`, { parse_mode: 'Markdown' });
-    } else if (submitMatch && userId !== ADMIN_ID) {
-      return ctx.reply('❌ Only admins can submit countdowns.', { parse_mode: 'Markdown' });
-    }
+// Admin command to submit countdown
+async function handleSubmitCountdown(ctx: Context) {
+  const message = ctx.message;
+  if (!('text' in message)) return;
 
-    // Handle user command: /[exam]countdown
-    const countdownMatch = text.match(/^\/(\w+)countdown$/i);
-    if (!countdownMatch) {
-      return ctx.reply('❗ *Usage:* `/[exam]countdown` (e.g., /neetcountdown) or /submitcountdown_[exam] DD-MM-YYYY (admin only)', { parse_mode: 'Markdown' });
-    }
+  const userId = ctx.from?.id;
+  if (userId !== ADMIN_ID) {
+    return ctx.reply('❌ Only the admin can submit countdowns.');
+  }
 
-    const exam = countdownMatch[1].toLowerCase();
-    const targetDate = await getExamDate(exam);
-    if (!targetDate) {
-      return ctx.reply(`❌ No countdown found for ${exam.toUpperCase()}. Admins can set it with /submitcountdown_${exam} DD-MM-YYYY`, { parse_mode: 'Markdown' });
-    }
-
-    const countdownText = calculateDaysUntilTarget(targetDate);
-    const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, targetDate);
-
-    await ctx.replyWithPhoto({ source: buffer }, {
-      caption: `🖼️ *Days until ${exam.toUpperCase()} ${targetDate.split('-').reverse().join('-')}*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+  const text = message.text;
+  const match = text.match(/^\/submitcountdown_([a-zA-Z]+)\s+(\d{2}-\d{2}-\d{4})$/i);
+  if (!match) {
+    return ctx.reply('❗ *Usage:* `/submitcountdown_<exam> DD-MM-YYYY` (e.g., `/submitcountdown_neet 03-05-2026`)', {
       parse_mode: 'Markdown',
     });
-  } catch (err) {
-    console.error('⚠️ Countdown generation error:', err);
-    await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
   }
-};
 
-export { countdownCommand };
+  const [, exam, dateStr] = match;
+  const formattedDate = validateAndConvertDate(dateStr);
+  if (!formattedDate) {
+    return ctx.reply('❌ Invalid date format. Use DD-MM-YYYY.');
+  }
+
+  try {
+    await set(ref(db, `exam-countdowns/${exam.toLowerCase()}`), { targetDate: formattedDate });
+    ctx.reply(`✅ Countdown for ${exam.toUpperCase()} set to ${dateStr}.`);
+  } catch (err) {
+    console.error('⚠️ Firebase write error:', err);
+    ctx.reply('⚠️ Could not save countdown. Please try again.');
+  }
+}
+
+// Function to register countdown commands dynamically
+function registerCountdownCommands(bot: Telegraf<Context>) {
+  onValue(ref(db, 'exam-countdowns'), (snapshot) => {
+    const exams = snapshot.val() || {};
+    Object.keys(exams).forEach((exam) => {
+      const command = `${exam.toLowerCase()}countdown`;
+      bot.command(command, async (ctx) => {
+        try {
+          const targetDate = exams[exam].targetDate;
+          if (!targetDate) {
+            return ctx.reply(`❌ No countdown set for ${exam.toUpperCase()}.`);
+          }
+          const countdownText = calculateDaysUntilTarget(targetDate);
+          const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, targetDate);
+          await ctx.replyWithPhoto({ source: buffer }, {
+            caption: `🖼️ *Days until ${exam.toUpperCase()}!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+            parse_mode: 'Markdown',
+          });
+        } catch (err) {
+          console.error(`⚠️ ${exam.toUpperCase()} countdown error:`, err);
+          await ctx.reply(`⚠️ Could not generate ${exam.toUpperCase()} countdown image. Please try again.`);
+        }
+      });
+    });
+  });
+}
+
+// Main function to setup commands
+const setupCountdownCommands = (bot: Telegraf<Context>) => {
+  // Register admin command
+  bot.command(/submitcountdown_.+/i, handleSubmitCountdown);
