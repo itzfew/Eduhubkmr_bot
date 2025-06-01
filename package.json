@@ -12,8 +12,9 @@
     "dotenv-cli": "^7.4.2",
     "firebase": "^10.14.1",
     "telegraf": "^4.16.3",
-      "canvas": "^2.11.2",
-    "fastest-levenshtein": "^1.0.12"
+    "canvas": "^2.11.2",
+    "fastest-levenshtein": "^1.0.12",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",
@@ -31,7 +32,11 @@
     "dev": "DEBUG=bot* dotenv -- nodemon -e ts -x ts-node src/index.ts",
     "devWindows": "@powershell -Command $env:DEBUG='bot*';dotenv -- -- nodemon -e ts -x ts-node src/index.ts",
     "build": "ncc build src/index.ts -o public -m",
+    "vercel-build": "apt-get update && apt-get install -y pkg-config libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpng-dev && npm install && ncc build src/index.ts -o public -m",
     "prettier": "prettier --write 'src/**/*.ts'",
     "lint": "tsc --noemit"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
