@@ -114,7 +114,7 @@ bot.command('study', study());
 bot.command('neet', neet());
 bot.command('jee', jee());
 bot.command('groups', groups());
-bot.command(['me', 'user', 'info'], me());
+bot.command(['me', 'info'], setupInfoCommands());
 bot.command('quote', quote());
 bot.command('quiz', playquiz());
 bot.command('neetcountdown', pin());
