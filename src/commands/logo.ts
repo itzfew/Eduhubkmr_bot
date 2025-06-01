@@ -222,7 +222,7 @@ const logoCommand = () => async (ctx: Context) => {
     const match = text.match(/^\/countdown\b/i);
 
     if (!match) {
-      return ctx.reply('❗ *Usage:* `/gen` to generate a countdown image until May 3, 2026', { parse_mode: 'Markdown' });
+      return ctx.reply('❗ *Usage:* `/countdown` to generate a countdown image until May 3, 2026', { parse_mode: 'Markdown' });
     }
 
     const countdownText = calculateDaysUntilTarget();
