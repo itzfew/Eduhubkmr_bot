@@ -34,21 +34,25 @@ function getRandomTextColor(): string {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function splitText(text: string): [string, string] {
-  const words = text.trim().split(/\s+/);
-  let line1 = '', line2 = '';
-  if (words.length === 1) {
-    line1 = words[0];
-  } else if (words.length === 2) {
-    [line1, line2] = words;
-  } else {
-    line2 = words.pop()!;
-    line1 = words.join(' ');
+function getCountdown(): string {
+  const targetDate = new Date('2026-05-03T00:00:00Z');
+  const now = new Date();
+  const diffMs = targetDate.getTime() - now.getTime();
+
+  if (diffMs <= 0) {
+    return 'Countdown has ended!';
   }
-  return [line1, line2];
+
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const months = Math.floor(diffSeconds / (60 * 60 * 24 * 30));
+  const days = Math.floor((diffSeconds % (60 * 60 * 24 * 30)) / (60 * 60 * 24));
+  const hours = Math.floor((diffSeconds % (60 * 60 * 24)) / (60 * 60));
+  const minutes = Math.floor((diffSeconds % (60 * 60)) / 60);
+
+  return `${months} Months\n${days} Days\n${hours} Hours\n${minutes} Minutes`;
 }
 
-async function generateLogo(text: string): Promise<{ buffer: Buffer, fontUsed: string }> {
+async function generateCountdownImage(): Promise<{ buffer: Buffer; fontUsed: string }> {
   const width = 1000;
   const height = 400;
   const canvas = createCanvas(width, height);
@@ -60,20 +64,19 @@ async function generateLogo(text: string): Promise<{ buffer: Buffer, fontUsed: s
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(0, 0, width, height);
 
-  // Split text
-  const [line1, line2] = splitText(text);
+  // Get countdown text
+  const countdownText = getCountdown();
+  const lines = countdownText.split('\n');
 
   // Auto-size font
-  let fontSize = 100;
-  do {
-    ctx.font = `bold ${fontSize}px "${fontFamily}"`;
-    fontSize -= 2;
-  } while (
-    Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width) > width * 0.85 &&
-    fontSize > 10
-  );
-
+  let fontSize = 80;
   ctx.font = `bold ${fontSize}px "${fontFamily}"`;
+  const maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
+  while (maxWidth > width * 0.85 && fontSize > 10) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px "${fontFamily}"`;
+  }
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -100,8 +103,9 @@ async function generateLogo(text: string): Promise<{ buffer: Buffer, fontUsed: s
   ctx.rotate(angle);
 
   const lineHeight = fontSize + 20;
-  if (line1) ctx.fillText(line1.toUpperCase(), 0, -lineHeight / 2);
-  if (line2) ctx.fillText(line2.toUpperCase(), 0, lineHeight / 2);
+  lines.forEach((line, index) => {
+    ctx.fillText(line.toUpperCase(), 0, (index - (lines.length - 1) / 2) * lineHeight);
+  });
 
   ctx.restore();
 
@@ -109,27 +113,18 @@ async function generateLogo(text: string): Promise<{ buffer: Buffer, fontUsed: s
 }
 
 // Telegraf Command
-const logoCommand = () => async (ctx: Context) => {
+const countdownCommand = () => async (ctx: Context) => {
   try {
-    const message = ctx.message;
-    const text = message?.text || '';
-    const match = text.match(/^\/gen(?:logo)?\s+(.+)/i);
-
-    if (!match) {
-      return ctx.reply('❗ *Usage:* `/genlogo Your Text Here`', { parse_mode: 'Markdown' });
-    }
-
-    const logoText = match[1].trim();
-    const { buffer, fontUsed } = await generateLogo(logoText);
+    const { buffer, fontUsed } = await generateCountdownImage();
 
     await ctx.replyWithPhoto({ source: buffer }, {
-      caption: `🖼️ *Here's your custom logo!*\nFont: \`${fontUsed}\``,
+      caption: `🕒 *Countdown to May 3, 2026!*\nFont: \`${fontUsed}\``,
       parse_mode: 'Markdown',
     });
   } catch (err) {
-    console.error('⚠️ Logo generation error:', err);
-    await ctx.reply('⚠️ Could not generate logo. Please try again.');
+    console.error('⚠️ Countdown image generation error:', err);
+    await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
   }
 };
 
-export { logoCommand };
+export { countdownCommand };
