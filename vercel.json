@@ -1,11 +1,18 @@
 {
-  "version": 2,
-  "public": true,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "api/index.ts"
+      "src": "src/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["src/**", "assets/**"],
+        "nodeVersion": "18"
+      }
     }
   ],
-  "redirects": [{ "source": "/", "destination": "/api", "permanent": false }]
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/index.ts"
+    }
+  ]
 }
