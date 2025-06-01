@@ -2,9 +2,11 @@ import { Context } from 'telegraf';
 import { createCanvas, registerFont } from 'canvas';
 import fs from 'fs';
 import path from 'path';
+import { db, ref, set, onValue } from '../utils/firebase';
 
 const fontsDir = path.resolve(__dirname, '../assets/fonts');
 const fontFamilies: string[] = [];
+const ADMIN_ID = 6930703214;
 
 // Register fonts
 fs.readdirSync(fontsDir).forEach((file) => {
@@ -51,8 +53,27 @@ function getRandomQuote(): string {
   return quotes[Math.floor(Math.random() * quotes.length)];
 }
 
-function calculateDaysUntilTarget(): string {
-  const targetDate = new Date('2026-05-03T00:00:00Z');
+function parseDate(dateStr: string): string | null {
+  const match = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return null;
+  const [_, day, month, year] = match;
+  const isoDate = `${year}-${month}-${day}T00:00:00Z`;
+  const date = new Date(isoDate);
+  return isNaN(date.getTime()) ? null : isoDate;
+}
+
+async function getCountdownDate(exam: 'neet' | 'jee'): Promise<string | null> {
+  return new Promise((resolve) => {
+    const dateRef = ref(db, `/countdowns/${exam}`);
+    onValue(dateRef, (snapshot) => {
+      const date = snapshot.val();
+      resolve(date || null);
+    }, { onlyOnce: true });
+  });
+}
+
+function calculateDaysUntilTarget(targetDateStr: string): string {
+  const targetDate = new Date(targetDateStr);
   const now = new Date();
   const diffMs = targetDate.getTime() - now.getTime();
 
@@ -64,7 +85,16 @@ function calculateDaysUntilTarget(): string {
   return `${diffDays}`;
 }
 
-async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUsed: string, quoteUsed: string }> {
+function formatDateForDisplay(targetDateStr: string): string {
+  const date = new Date(targetDateStr);
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+}
+
+async function generateLogo(daysText: string, exam: 'neet' | 'jee', targetDateStr: string): Promise<{ buffer: Buffer, fontUsed: string, quoteUsed: string }> {
   const width = 1200;
   const height = 900; // 4:3 aspect ratio
   const canvas = createCanvas(width, height);
@@ -98,11 +128,11 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
   ctx.lineWidth = 20;
-  ctx.strokeStyle = '#ffffff'; // White border for contrast
+  ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
   // Glow effect around circle
-  ctx.shadowColor = `${color}80`; // Semi-transparent primary color
+  ctx.shadowColor = `${color}80`;
   ctx.shadowBlur = 25;
   ctx.beginPath();
   ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
@@ -162,25 +192,26 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fill();
 
   // Glow effect for ribbon
-  ctx.shadowColor = `${color}66`; // Semi-transparent primary color
+  ctx.shadowColor = `${color}66`;
   ctx.shadowBlur = 20;
   ctx.fill();
   ctx.shadowBlur = 0;
 
   // "DAYS" text on ribbon
   ctx.font = `bold 48px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillStyle = '#ffffff';
   ctx.fillText('DAYS', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight / 2);
 
   // "LEFT" text
   ctx.font = `extrabold 90px "${fontFamily}"`;
-  ctx.fillStyle = '#ffffff'; // White for high contrast
+  ctx.fillStyle = '#ffffff';
   ctx.fillText('LEFT', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 80);
 
-  // "Until May 3, 2026" text
+  // "Until <date>" text
+  const displayDate = formatDateForDisplay(targetDateStr);
   ctx.font = `italic 36px "${fontFamily}"`;
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
-  ctx.fillText('Until May 3, 2026', ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillText(`Until ${displayDate}`, ribbonX + ribbonWidth / 2, ribbonY + ribbonHeight + 140);
 
   // Quote text
   let quoteFontSize = 32;
@@ -200,7 +231,7 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   }
   if (currentLine) quoteLines.push(currentLine);
 
-  ctx.fillStyle = '#f1f5f9'; // Off-white for high contrast
+  ctx.fillStyle = '#f1f5f9';
   const quoteY = height - 120;
   quoteLines.forEach((line, index) => {
     ctx.fillText(line, width / 2, quoteY + index * 40);
@@ -218,20 +249,56 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
 const logoCommand = () => async (ctx: Context) => {
   try {
     const message = ctx.message;
-    const text = message?.text || '';
-    const match = text.match(/^\/gen\b/i);
-
-    if (!match) {
-      return ctx.reply('❗ *Usage:* `/gen` to generate a countdown image until May 3, 2026', { parse_mode: 'Markdown' });
+    if (!('text' in message)) {
+      return ctx.reply('❗ Please send a valid command.');
     }
 
-    const countdownText = calculateDaysUntilTarget();
-    const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText);
+    const userId = message.from.id;
+    const text = message.text || '';
+    const neetMatch = text.match(/^\/neetcountdown\b/i);
+    const jeeMatch = text.match(/^\/jeecountdown\b/i);
+    const addNeetMatch = text.match(/^\/addcountdown_neet\s+(\d{2}-\d{2}-\d{4})$/i);
+    const addJeeMatch = text.match(/^\/addcountdown_jee\s+(\d{2}-\d{2}-\d{4})$/i);
 
-    await ctx.replyWithPhoto({ source: buffer }, {
-      caption: `🖼️ *Days until May 3, 2026!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
-      parse_mode: 'Markdown',
-    });
+    if (addNeetMatch && userId === ADMIN_ID) {
+      const dateStr = parseDate(addNeetMatch[1]);
+      if (!dateStr) {
+        return ctx.reply('❗ Invalid date format. Use `/addcountdown_neet dd-mm-yyyy`', { parse_mode: 'Markdown' });
+      }
+      await set(ref(db, '/countdowns/neet'), dateStr);
+      return ctx.reply(`✅ NEET countdown set to ${addNeetMatch[1]}`);
+    } else if (addJeeMatch && userId === ADMIN_ID) {
+      const dateStr = parseDate(addJeeMatch[1]);
+      if (!dateStr) {
+        return ctx.reply('❗ Invalid date format. Use `/addcountdown_jee dd-mm-yyyy`', { parse_mode: 'Markdown' });
+      }
+      await set(ref(db, '/countdowns/jee'), dateStr);
+      return ctx.reply(`✅ JEE countdown set to ${addJeeMatch[1]}`);
+    } else if (neetMatch) {
+      const targetDate = await getCountdownDate('neet');
+      if (!targetDate) {
+        return ctx.reply('❗ No NEET countdown date set. Admin can set it with `/addcountdown_neet dd-mm-yyyy`', { parse_mode: 'Markdown' });
+      }
+      const countdownText = calculateDaysUntilTarget(targetDate);
+      const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, 'neet', targetDate);
+      await ctx.replyWithPhoto({ source: buffer }, {
+        caption: `🖼️ *Days until NEET ${formatDateForDisplay(targetDate)}!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+        parse_mode: 'Markdown',
+      });
+    } else if (jeeMatch) {
+      const targetDate = await getCountdownDate('jee');
+      if (!targetDate) {
+        return ctx.reply('❗ No JEE countdown date set. Admin can set it with `/addcountdown_jee dd-mm-yyyy`', { parse_mode: 'Markdown' });
+      }
+      const countdownText = calculateDaysUntilTarget(targetDate);
+      const { buffer, fontUsed, quoteUsed } = await generateLogo(countdownText, 'jee', targetDate);
+      await ctx.replyWithPhoto({ source: buffer }, {
+        caption: `🖼️ *Days until JEE ${formatDateForDisplay(targetDate)}!*\nFont: \`${fontUsed}\`\nQuote: _"${quoteUsed}"_`,
+        parse_mode: 'Markdown',
+      });
+    } else {
+      return ctx.reply('❗ *Usage:* `/neetcountdown` or `/jeecountdown` for countdowns\nAdmin: `/addcountdown_neet dd-mm-yyyy` or `/addcountdown_jee dd-mm-yyyy`', { parse_mode: 'Markdown' });
+    }
   } catch (err) {
     console.error('⚠️ Logo generation error:', err);
     await ctx.reply('⚠️ Could not generate countdown image. Please try again.');
