@@ -150,6 +150,16 @@ export const stopCountdown = () => async (ctx: Context) => {
   // Remove pinned message data from Firebase
   try {
     const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
+    const snapshot = await new Promise((resolve) => {
+      onValue(pinnedRef, resolve, { onlyOnce: true });
+    });
+    const data = (snapshot as any).val();
+
+    if (!data || !data.messageId) {
+      await ctx.reply('⚠️ No active countdown found in this chat.');
+      return;
+    }
+
     await remove(pinnedRef);
     await ctx.telegram.unpinChatMessage(chatId);
     await ctx.reply('✅ NEET countdown stopped and unpinned.');
@@ -159,8 +169,9 @@ export const stopCountdown = () => async (ctx: Context) => {
   }
 };
 
-// Set up daily update listener (should be called once during bot initialization)
-export const setupDailyUpdateListener = (bot: any) => {
+// Set up daily update listener
+export const setupDailyUpdateListener = (bot: Telegraf<Context>) => {
+  // Handle refresh button callback
   bot.on('callback_query', async (callbackCtx: Context) => {
     const chatId = callbackCtx.chat?.id;
     const messageId = callbackCtx.callbackQuery?.message?.message_id;
@@ -180,10 +191,14 @@ export const setupDailyUpdateListener = (bot: any) => {
     }
   });
 
-  // Set up a single Firebase listener for all chats
-  const pinnedMessagesRef = ref(db, 'pinnedMessages');
-  onValue(pinnedMessagesRef, async (snapshot) => {
-    const data = snapshot.val();
+  // Set up interval-based daily updates (instead of Firebase listener)
+  setInterval(async () => {
+    const pinnedMessagesRef = ref(db, 'pinnedMessages');
+    const snapshot = await new Promise((resolve) => {
+      onValue(pinnedMessagesRef, resolve, { onlyOnce: true });
+    });
+    const data = (snapshot as any).val();
+
     if (!data) return;
 
     for (const chatId of Object.keys(data)) {
@@ -195,18 +210,22 @@ export const setupDailyUpdateListener = (bot: any) => {
 
       if (now - lastUpdated >= oneDayMs) {
         try {
-          const ctx = bot; // Use bot context; ensure it supports telegram methods
+          // Create a context-like object for Telegram API calls
+          const ctx = {
+            telegram: bot.telegram,
+            chat: { id: parseInt(chatId) },
+          } as Context;
           await updatePinnedMessage(ctx, parseInt(chatId), messageId);
         } catch (error) {
           console.error(`Error updating countdown for chat ${chatId}:`, error);
         }
       }
     }
-  });
+  }, 60 * 60 * 1000); // Check every hour
 };
 
 // Cleanup function to remove listeners (call on bot shutdown)
 export const cleanupListeners = () => {
-  const pinnedMessagesRef = ref(db, 'pinnedMessages');
-  off(pinnedMessagesRef);
+  // No need to clean up setInterval as it's managed by Node.js
+  console.log('Cleaned up listeners.');
 };
