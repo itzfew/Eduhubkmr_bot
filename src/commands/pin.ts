@@ -5,7 +5,7 @@ import { db, ref, set, onValue, remove, off } from '../utils/firebase';
 const NEET_DATE = new Date('2026-05-03T00:00:00+05:30'); // IST timezone
 
 // Function to calculate countdown in months:days:hours
-const getCountdown = (): string => {
+const getCountdown = () => {
   const now = new Date();
   const diffMs = NEET_DATE.getTime() - now.getTime();
 
@@ -27,7 +27,7 @@ const getCountdown = (): string => {
 };
 
 // Function to generate a well-designed countdown message
-const generateCountdownMessage = (): string => {
+const generateCountdownMessage = () => {
   const countdown = getCountdown();
   return (
     `📅 *NEET 2026 Countdown* 📅\n\n` +
@@ -39,9 +39,8 @@ const generateCountdownMessage = (): string => {
 };
 
 // Function to check admin status
-const isAdmin = async (ctx: Context, userId: number, chatId: number): Promise<boolean> => {
+const isAdmin = async (ctx: Context, userId: number, chatId: number) => {
   try {
-    if (ctx.chat?.type === 'private') return true; // Allow in private chats
     const admins = await ctx.telegram.getChatAdministrators(chatId);
     return admins.some((admin) => admin.user.id === userId);
   } catch (error) {
@@ -51,32 +50,17 @@ const isAdmin = async (ctx: Context, userId: number, chatId: number): Promise<bo
 };
 
 // Function to save/update pinned message in Firebase
-const savePinnedMessage = async (chatId: number, messageId: number): Promise<void> => {
+const savePinnedMessage = async (chatId: number, messageId: number) => {
   try {
     const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
     await set(pinnedRef, { messageId, lastUpdated: Date.now() });
   } catch (error) {
     console.error('Error saving pinned message to Firebase:', error);
-    throw error;
-  }
-};
-
-// Function to get pinned message from Firebase
-const getPinnedMessage = async (chatId: number): Promise<{ messageId: number; lastUpdated: number } | null> => {
-  try {
-    const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
-    const snapshot = await new Promise((resolve) => {
-      onValue(pinnedRef, resolve, { onlyOnce: true });
-    });
-    return (snapshot as any).val();
-  } catch (error) {
-    console.error('Error retrieving pinned message from Firebase:', error);
-    return null;
   }
 };
 
 // Function to update pinned message
-const updatePinnedMessage = async (ctx: Context, chatId: number, messageId: number): Promise<void> => {
+const updatePinnedMessage = async (ctx: Context, chatId: number, messageId: number) => {
   try {
     await ctx.telegram.editMessageText(
       chatId,
@@ -86,14 +70,14 @@ const updatePinnedMessage = async (ctx: Context, chatId: number, messageId: numb
       {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [[{ text: '🔄 Refresh Countdown', callback_data: `refresh_countdown_${chatId}_${messageId}` }]],
+          inline_keyboard: [[{ text: '🔄 Refresh Countdown', callback_data: 'refresh_countdown' }]],
         },
       }
     );
     await savePinnedMessage(chatId, messageId); // Update lastUpdated timestamp
   } catch (error) {
-    console.error(`Error updating pinned message for chat ${chatId}, message ${messageId}:`, error);
-    throw error;
+    console.error('Error updating pinned message:', error);
+    throw error; // Rethrow to handle in caller
   }
 };
 
@@ -115,18 +99,23 @@ export const pin = () => async (ctx: Context) => {
   }
 
   // Check if a countdown is already active
-  const pinnedData = await getPinnedMessage(chatId);
-  if (pinnedData && pinnedData.messageId) {
-    await ctx.reply('⚠️ A countdown is already active in this chat. Use /stopcountdown to stop it first.');
-    return;
-  }
-
+  const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
   try {
+    const snapshot = await new Promise((resolve) => {
+      onValue(pinnedRef, resolve, { onlyOnce: true });
+    });
+    const data = (snapshot as any).val();
+
+    if (data && data.messageId) {
+      await ctx.reply('⚠️ A countdown is already active in this chat. Use /stopcountdown to stop it first.');
+      return;
+    }
+
     // Send the initial countdown message
     const sentMessage = await ctx.reply(generateCountdownMessage(), {
       parse_mode: 'Markdown',
       reply_markup: {
-        inline_keyboard: [[{ text: '🔄 Refresh Countdown', callback_data: `refresh_countdown_${chatId}_${sentMessage.message_id}` }]],
+        inline_keyboard: [[{ text: '🔄 Refresh Countdown', callback_data: 'refresh_countdown' }]],
       },
     });
 
@@ -135,7 +124,6 @@ export const pin = () => async (ctx: Context) => {
     // Pin the message
     await ctx.telegram.pinChatMessage(chatId, messageId, { disable_notification: true });
     await savePinnedMessage(chatId, messageId);
-    await ctx.reply('✅ NEET countdown started and pinned!');
   } catch (error) {
     console.error('Error setting up countdown:', error);
     await ctx.reply('❌ Failed to set up the countdown.');
@@ -159,17 +147,11 @@ export const stopCountdown = () => async (ctx: Context) => {
     return;
   }
 
+  // Remove pinned message data from Firebase
   try {
-    const pinnedData = await getPinnedMessage(chatId);
-    if (!pinnedData || !pinnedData.messageId) {
-      await ctx.reply('⚠️ No active countdown found in this chat.');
-      return;
-    }
-
-    // Remove pinned message data from Firebase and unpin
     const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
     await remove(pinnedRef);
-    await ctx.telegram.unpinChatMessage(chatId, { message_id: pinnedData.messageId });
+    await ctx.telegram.unpinChatMessage(chatId);
     await ctx.reply('✅ NEET countdown stopped and unpinned.');
   } catch (error) {
     console.error('Error stopping countdown:', error);
@@ -177,38 +159,28 @@ export const stopCountdown = () => async (ctx: Context) => {
   }
 };
 
-// Set up daily update listener and callback query handler
+// Set up daily update listener (should be called once during bot initialization)
 export const setupDailyUpdateListener = (bot: any) => {
-  // Handle callback queries for refresh
   bot.on('callback_query', async (callbackCtx: Context) => {
     const chatId = callbackCtx.chat?.id;
     const messageId = callbackCtx.callbackQuery?.message?.message_id;
-    const callbackData = callbackCtx.callbackQuery?.data;
 
-    if (!chatId || !messageId || !callbackData) {
+    if (!chatId || !messageId) {
       await callbackCtx.answerCbQuery('❌ Error: Invalid context.');
       return;
     }
 
-    if (callbackData.startsWith('refresh_countdown_')) {
+    if (callbackCtx.callbackQuery?.data === 'refresh_countdown') {
       try {
-        // Validate that the message is still pinned
-        const pinnedData = await getPinnedMessage(chatId);
-        if (!pinnedData || pinnedData.messageId !== messageId) {
-          await callbackCtx.answerCbQuery('❌ Error: Countdown message is no longer active.');
-          return;
-        }
-
         await updatePinnedMessage(callbackCtx, chatId, messageId);
         await callbackCtx.answerCbQuery('✅ Countdown refreshed!');
       } catch (error) {
-        console.error('Error refreshing countdown:', error);
         await callbackCtx.answerCbQuery('❌ Failed to refresh countdown.');
       }
     }
   });
 
-  // Set up Firebase listener for daily updates
+  // Set up a single Firebase listener for all chats
   const pinnedMessagesRef = ref(db, 'pinnedMessages');
   onValue(pinnedMessagesRef, async (snapshot) => {
     const data = snapshot.val();
@@ -223,11 +195,7 @@ export const setupDailyUpdateListener = (bot: any) => {
 
       if (now - lastUpdated >= oneDayMs) {
         try {
-          // Create a mock context for Telegram API calls
-          const ctx = {
-            telegram: bot.telegram,
-            chat: { id: parseInt(chatId) },
-          } as Context;
+          const ctx = bot; // Use bot context; ensure it supports telegram methods
           await updatePinnedMessage(ctx, parseInt(chatId), messageId);
         } catch (error) {
           console.error(`Error updating countdown for chat ${chatId}:`, error);
@@ -237,7 +205,7 @@ export const setupDailyUpdateListener = (bot: any) => {
   });
 };
 
-// Cleanup function to remove listeners
+// Cleanup function to remove listeners (call on bot shutdown)
 export const cleanupListeners = () => {
   const pinnedMessagesRef = ref(db, 'pinnedMessages');
   off(pinnedMessagesRef);
