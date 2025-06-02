@@ -15,7 +15,7 @@ import { isPrivateChat } from './utils/groupSettings';
 import { me, info } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
-import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './pin';
+import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './commands/pin';
 import { logoCommand } from './commands/logo';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
