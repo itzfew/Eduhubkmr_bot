@@ -2,15 +2,16 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, push, set, onValue, remove } from 'firebase/database';
 
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: 'AIzaSyDNME0C__0yE84_fmabt9_qhnv7l4Y2osg',
-  authDomain: 'telegrambot-d9bde.firebaseapp.com',
-  databaseURL: 'https://telegrambot-d9bde-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId: 'telegrambot-d9bde',
-  storageBucket: 'telegrambot-d9bde.firebasestorage.app',
-  messagingSenderId: '1016643360568',
-  appId: '1:1016643360568:web:a495de89c5f7f983e6d3cd',
-  measurementId: 'G-ZQLEPBPWZV',
+  apiKey: "AIzaSyDIWtVfoGIWQoRVe36v6g6S3slTRRYUAgk",
+  authDomain: "quizes-3028d.firebaseapp.com",
+  databaseURL: "https://quizes-3028d-default-rtdb.firebaseio.com",
+  projectId: "quizes-3028d",
+  storageBucket: "quizes-3028d.appspot.com",
+  messagingSenderId: "624591251031",
+  appId: "1:624591251031:web:e093472f24fdeb29fc2512",
+  measurementId: "G-QMZK5Y6769"
 };
 
 const app = initializeApp(firebaseConfig);
