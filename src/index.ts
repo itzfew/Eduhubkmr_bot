@@ -1,7 +1,8 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, ref, push, set } from './utils/firebase';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'; // Import Firestore
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -18,6 +19,15 @@ import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './commands/pin';
 import { logoCommand } from './commands/logo';
 
+// Initialize Firebase Admin with Firestore
+import * as admin from 'firebase-admin';
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+const db = getFirestore(); // Initialize Firestore
+
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
@@ -33,8 +43,8 @@ interface PendingQuestion {
   count: number;
   questions: Array<{
     question: string;
-    options: { [key: string]: string };
-    correct_option: string;
+    options: { type: string; value: string }[];
+    correctOption: number;
     explanation: string;
     image?: string;
   }>;
@@ -393,21 +403,25 @@ bot.on('message', async (ctx) => {
     }
 
     const correctOptionIndex = poll.correct_option_id;
-    const correctOptionLetter = ['A', 'B', 'C', 'D'][correctOptionIndex];
+
+    // Structure options to match Firestore schema
+    const options = poll.options.map((opt: any, index: number) => ({
+      type: 'text', // Assuming text options for polls; extend for images if needed
+      value: opt.text,
+    }));
 
     const question = {
       subject: submission.subject,
       chapter: submission.chapter,
       question: poll.question,
-      options: {
-        A: poll.options[0].text,
-        B: poll.options[1].text,
-        C: poll.options[2].text,
-        D: poll.options[3].text,
-      },
-      correct_option: correctOptionLetter,
+      options,
+      correctOption: correctOptionIndex,
       explanation: poll.explanation,
       image: '',
+      questionImage: null,
+      explanationImage: null,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: ADMIN_ID.toString(),
     };
 
     submission.questions.push(question);
@@ -419,18 +433,17 @@ bot.on('message', async (ctx) => {
         `then send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`
       );
     } else {
-      // Save all questions to Firebase
+      // Save all questions to Firestore
       try {
-        const questionsRef = ref(db, 'questions');
         for (const q of submission.questions) {
-          const newQuestionRef = push(questionsRef);
-          await set(newQuestionRef, q);
+          const questionId = `q_${Math.random().toString(36).substr(2, 9)}`; // Generate unique ID
+          await db.collection('questions').doc(questionId).set(q);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
       } catch (error) {
-        console.error('Failed to save questions to Firebase:', error);
-        await ctx.reply('❌ Error: Unable to save questions to Firebase.');
+        console.error('Failed to save questions to Firestore:', error);
+        await ctx.reply('❌ Error: Unable to save questions to Firestore.');
       }
     }
     return;
@@ -449,6 +462,7 @@ bot.on('message', async (ctx) => {
       }
     } else if (msg.text.startsWith('http') && msg.text.match(/\.(jpg|jpeg|png|gif)$/i)) {
       lastQuestion.image = msg.text;
+      lastQuestion.questionImage = msg.text; // Map to Firestore schema
       submission.expectingImageFor = undefined;
       if (submission.questions.length < submission.count) {
         await ctx.reply(`Image saved. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
@@ -459,16 +473,15 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Detect Telegram Poll and send JSON to admin
+  // Detect Telegram Poll and send JSON to admin, save to Firestore
   if (msg.poll) {
     const poll = msg.poll;
     const pollJson = JSON.stringify(poll, null, 2);
 
-    // Save poll data to Firebase Realtime Database under /polls/
+    // Save poll data to Firestore under /polls/
     try {
-      const pollsRef = ref(db, 'polls');
-      const newPollRef = push(pollsRef);
-      await set(newPollRef, {
+      const pollId = `p_${Math.random().toString(36).substr(2, 9)}`;
+      await db.collection('polls').doc(pollId).set({
         poll,
         from: {
           id: ctx.from?.id,
@@ -480,10 +493,10 @@ bot.on('message', async (ctx) => {
           id: ctx.chat.id,
           type: ctx.chat.type,
         },
-        receivedAt: Date.now(),
+        receivedAt: FieldValue.serverTimestamp(),
       });
     } catch (error) {
-      console.error('Firebase save error:', error);
+      console.error('Firestore save error:', error);
     }
     await ctx.reply('Thanks for sending a poll! Your poll data has been sent to the admin.');
 
