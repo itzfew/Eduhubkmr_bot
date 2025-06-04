@@ -1,4 +1,4 @@
-import { Telegraf, Context } from 'telegraf';
+ import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
 import { initializeApp } from 'firebase-admin/app';
