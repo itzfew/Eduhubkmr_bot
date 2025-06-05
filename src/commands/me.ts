@@ -1,8 +1,9 @@
 import { Context } from 'telegraf';
 import { isPrivateChat } from '../utils/groupSettings';
+import { Message, Chat } from 'telegraf/typings/core/types/typegram';
 
 function formatUserLink(id: number, name: string) {
-  const encodedName = name.replace(//g, '\').replace(//g, '\');
+  const encodedName = name.replace(/[_*[\]()~`>#+-=|{}.!]/g, '\\$&');
   return `[${encodedName}](tg://user?id=${id})`;
 }
 
@@ -35,7 +36,7 @@ export function me() {
 🌐 *Language:* ${userInfo.languageCode}
 `;
 
-      await ctx.reply(text, { parse_mode: 'Markdown' });
+      await ctx.reply(text, { parse_mode: 'MarkdownV2' });
     } catch (err) {
       console.error('Error in /me:', err);
       await ctx.reply('An error occurred while fetching your info.');
@@ -46,12 +47,17 @@ export function me() {
 export function info() {
   return async (ctx: Context) => {
     try {
-      const query = ctx.message?.text?.split(' ').slice(1).join(' ').trim();
+      // Check if message is a TextMessage
+      if (!('text' in (ctx.message as Message))) {
+        return ctx.reply('Usage: /info <user_id or @username>');
+      }
+
+      const query = (ctx.message as Message.TextMessage).text.split(' ').slice(1).join(' ').trim();
       if (!query) {
         return ctx.reply('Usage: /info <user_id or @username>');
       }
 
-      let chat;
+      let chat: Chat;
       try {
         chat = await ctx.telegram.getChat(query.startsWith('@') ? query : Number(query));
       } catch (error) {
@@ -59,17 +65,20 @@ export function info() {
         return ctx.reply('⚠️ Could not retrieve user info. The user might not have interacted with the bot or doesn’t exist.');
       }
 
-      const name = chat.first_name || chat.title || 'N/A';
+      // Handle different chat types
+      const name = ('first_name' in chat && chat.first_name) || ('title' in chat && chat.title) || 'N/A';
+      const username = ('username' in chat && chat.username) ? `@${chat.username}` : 'None';
+
       const text = `
 👤 *User Info* 👤
 
 🆔 *ID:* \`${chat.id}\`
 📛 *Name:* ${formatUserLink(chat.id, name)}
-🔖 *Username:* ${chat.username ? '@' + chat.username : 'None'}
+🔖 *Username:* ${username}
 🌐 *Type:* ${chat.type || 'private'}
 `;
 
-      await ctx.reply(text, { parse_mode: 'Markdown' });
+      await ctx.reply(text, { parse_mode: 'MarkdownV2' });
     } catch (err) {
       console.error('Error in /info:', err);
       await ctx.reply('An error occurred while processing your request.');
