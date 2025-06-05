@@ -1,4 +1,4 @@
-import { Context } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 import { db, ref, set, onValue, remove, off } from '../utils/firebase';
 
 // Target NEET exam date
@@ -172,22 +172,26 @@ export const stopCountdown = () => async (ctx: Context) => {
 // Set up daily update listener
 export const setupDailyUpdateListener = (bot: Telegraf<Context>) => {
   // Handle refresh button callback
-  bot.on('callback_query', async (callbackCtx: Context) => {
+  bot.on('callback_query', async (callbackCtx) => {
+    const callbackQuery = callbackCtx.callbackQuery;
     const chatId = callbackCtx.chat?.id;
-    const messageId = callbackCtx.callbackQuery?.message?.message_id;
+    const messageId = callbackQuery?.message?.message_id;
 
     if (!chatId || !messageId) {
       await callbackCtx.answerCbQuery('❌ Error: Invalid context.');
       return;
     }
 
-    if (callbackCtx.callbackQuery?.data === 'refresh_countdown') {
+    // Type guard for CallbackQuery with data
+    if ('data' in callbackQuery && callbackQuery.data === 'refresh_countdown') {
       try {
         await updatePinnedMessage(callbackCtx, chatId, messageId);
         await callbackCtx.answerCbQuery('✅ Countdown refreshed!');
       } catch (error) {
         await callbackCtx.answerCbQuery('❌ Failed to refresh countdown.');
       }
+    } else {
+      await callbackCtx.answerCbQuery('❌ Invalid callback data.');
     }
   });
 
