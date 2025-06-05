@@ -1,8 +1,7 @@
-// src/index.ts
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, FieldValue, ref, push, set } from './utils/firebase'; // Import from updated firebase.ts
+import { db, ref, push, set } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -34,11 +33,10 @@ interface PendingQuestion {
   count: number;
   questions: Array<{
     question: string;
-    options: { type: string; value: string }[];
-    correctOption: number;
+    options: { [key: string]: string };
+    correct_option: string;
     explanation: string;
-    questionImage?: string | null;
-    explanationImage?: string | null;
+    image?: string;
   }>;
   expectingImageFor?: string; // Track poll ID awaiting an image
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
@@ -124,7 +122,110 @@ bot.command('neetcountdown', pin());
 bot.command('stopcountdown', stopCountdown());
 bot.command('countdown', logoCommand());
 
-// ... (Other commands like /users, /broadcast, /reply remain unchanged)
+// New command to show user count from Google Sheets
+bot.command('users', async (ctx) => {
+  if (ctx.from?.id !== ADMIN_ID) {
+    return ctx.reply('You are not authorized to use this command.');
+  }
+
+  try {
+    const chatIds = await fetchChatIdsFromSheet();
+    const totalUsers = chatIds.length;
+
+    await ctx.reply(`📊 Total users: ${totalUsers}`, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
+      },
+    });
+  } catch (err) {
+    console.error('Failed to fetch user count:', err);
+    await ctx.reply('❌ Error: Unable to fetch user count from Google Sheet.');
+  }
+});
+
+// Handle refresh button for user count
+bot.action('refresh_users', async (ctx) => {
+  if (ctx.from?.id !== ADMIN_ID) {
+    await ctx.answerCbQuery('Unauthorized');
+    return;
+  }
+
+  try {
+    const chatIds = await fetchChatIdsFromSheet();
+    const totalUsers = chatIds.length;
+
+    await ctx.editMessageText(`📊 Total users: ${totalUsers} (refreshed)`, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
+      },
+    });
+    await ctx.answerCbQuery('Refreshed!');
+  } catch (err) {
+    console.error('Failed to refresh user count:', err);
+    await ctx.answerCbQuery('Refresh failed');
+  }
+});
+
+// Broadcast to all saved chat IDs
+bot.command('broadcast', async (ctx) => {
+  if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
+
+  const msg = ctx.message.text?.split(' ').slice(1).join(' ');
+  if (!msg) return ctx.reply('Usage:\n/broadcast Your message here');
+
+  let chatIds: number[] = [];
+
+  try {
+    chatIds = await fetchChatIdsFromSheet();
+  } catch (err) {
+    console.error('Failed to fetch chat IDs:', err);
+    return ctx.reply('❌ Error: Unable to fetch chat IDs from Google Sheet.');
+  }
+
+  if (chatIds.length === 0) {
+    return ctx.reply('No users to broadcast to.');
+  }
+
+  let success = 0;
+  for (const id of chatIds) {
+    try {
+      await ctx.telegram.sendMessage(id, msg);
+      success++;
+    } catch (err) {
+      console.log(`Failed to send to ${id}`, err);
+    }
+  }
+
+  await ctx.reply(`✅ Broadcast sent to ${success} users.`);
+});
+
+// Admin reply to user via command
+bot.command('reply', async (ctx) => {
+  if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
+
+  const parts = ctx.message.text?.split(' ');
+  if (!parts || parts.length < 3) {
+    return ctx.reply('Usage:\n/reply <chat_id> <message>');
+  }
+
+  const chatIdStr = parts[1].trim();
+  const chatId = Number(chatIdStr);
+  const message = parts.slice(2).join(' ');
+
+  if (isNaN(chatId)) {
+    return ctx.reply(`Invalid chat ID: ${chatIdStr}`);
+  }
+
+  try {
+    await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}`, { parse_mode: 'Markdown' });
+    await ctx.reply(`Reply sent to ${chatId}`, { parse_mode: 'Markdown' });
+  } catch (error) {
+    console.error('Reply error:', error);
+    await ctx.reply(`Failed to send reply to ${chatId}`, { parse_mode: 'Markdown' });
+  }
+});
 
 // Handle /add<subject> or /add<Subject>__<Chapter> commands
 bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
@@ -292,24 +393,21 @@ bot.on('message', async (ctx) => {
     }
 
     const correctOptionIndex = poll.correct_option_id;
-
-    // Structure options to match Firestore schema
-    const options = poll.options.map((opt: any) => ({
-      type: 'text', // Telegram polls are text-based
-      value: opt.text,
-    }));
+    const correctOptionLetter = ['A', 'B', 'C', 'D'][correctOptionIndex];
 
     const question = {
       subject: submission.subject,
       chapter: submission.chapter,
       question: poll.question,
-      options,
-      correctOption: correctOptionIndex,
+      options: {
+        A: poll.options[0].text,
+        B: poll.options[1].text,
+        C: poll.options[2].text,
+        D: poll.options[3].text,
+      },
+      correct_option: correctOptionLetter,
       explanation: poll.explanation,
-      questionImage: null,
-      explanationImage: null,
-      createdAt: FieldValue.serverTimestamp(),
-      createdBy: ADMIN_ID.toString(),
+      image: '',
     };
 
     submission.questions.push(question);
@@ -321,17 +419,18 @@ bot.on('message', async (ctx) => {
         `then send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`
       );
     } else {
-      // Save all questions to Firestore
+      // Save all questions to Firebase
       try {
+        const questionsRef = ref(db, 'questions');
         for (const q of submission.questions) {
-          const { id, ref: docRef } = push(ref('questions')); // Use Firestore-compatible push
-          await set(docRef, q);
+          const newQuestionRef = push(questionsRef);
+          await set(newQuestionRef, q);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
       } catch (error) {
-        console.error('Failed to save questions to Firestore:', error);
-        await ctx.reply('❌ Error: Unable to save questions to Firestore.');
+        console.error('Failed to save questions to Firebase:', error);
+        await ctx.reply('❌ Error: Unable to save questions to Firebase.');
       }
     }
     return;
@@ -343,13 +442,13 @@ bot.on('message', async (ctx) => {
     const lastQuestion = submission.questions[submission.questions.length - 1];
 
     if (msg.text.toLowerCase() === 'skip') {
-      lastQuestion.questionImage = null;
+      lastQuestion.image = '';
       submission.expectingImageFor = undefined;
       if (submission.questions.length < submission.count) {
         await ctx.reply(`Image skipped. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
       }
     } else if (msg.text.startsWith('http') && msg.text.match(/\.(jpg|jpeg|png|gif)$/i)) {
-      lastQuestion.questionImage = msg.text;
+      lastQuestion.image = msg.text;
       submission.expectingImageFor = undefined;
       if (submission.questions.length < submission.count) {
         await ctx.reply(`Image saved. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
@@ -360,15 +459,16 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Detect Telegram Poll and send JSON to admin, save to Firestore
+  // Detect Telegram Poll and send JSON to admin
   if (msg.poll) {
     const poll = msg.poll;
     const pollJson = JSON.stringify(poll, null, 2);
 
-    // Save poll data to Firestore under /polls/
+    // Save poll data to Firebase Realtime Database under /polls/
     try {
-      const { id, ref: docRef } = push(ref('polls'));
-      await set(docRef, {
+      const pollsRef = ref(db, 'polls');
+      const newPollRef = push(pollsRef);
+      await set(newPollRef, {
         poll,
         from: {
           id: ctx.from?.id,
@@ -380,10 +480,10 @@ bot.on('message', async (ctx) => {
           id: ctx.chat.id,
           type: ctx.chat.type,
         },
-        receivedAt: FieldValue.serverTimestamp(),
+        receivedAt: Date.now(),
       });
     } catch (error) {
-      console.error('Firestore save error:', error);
+      console.error('Firebase save error:', error);
     }
     await ctx.reply('Thanks for sending a poll! Your poll data has been sent to the admin.');
 
