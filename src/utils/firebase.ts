@@ -33,26 +33,18 @@ signInAnonymously(auth)
 async function uploadImageFromUrl(imageUrl: string, path: string): Promise<string | null> {
   try {
     const response = await fetch(imageUrl);
-    const blob = await response.blob();
+    if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64Data = buffer.toString('base64');
+    
     const storageRef = ref(storage, path);
-    const reader = new FileReader();
-    return new Promise((resolve, reject) => {
-      reader.onloadend = async () => {
-        try {
-          const base64Data = (reader.result as string).split(',')[1];
-          await uploadString(storageRef, base64Data, 'base64');
-          const downloadUrl = await getDownloadURL(storageRef);
-          resolve(downloadUrl);
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          reject(error);
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    await uploadString(storageRef, base64Data, 'base64');
+    const downloadUrl = await getDownloadURL(storageRef);
+    return downloadUrl;
   } catch (error) {
-    console.error('Error fetching image:', error);
+    console.error('Error uploading image from URL:', error);
     return null;
   }
 }
@@ -63,12 +55,12 @@ async function uploadTelegramPhoto(fileId: string, botToken: string, path: strin
     // Get file path from Telegram
     const fileResponse = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
     const fileData = await fileResponse.json();
-    if (!fileData.ok) throw new Error(fileData.description);
+    if (!fileData.ok) throw new Error(`Telegram API error: ${fileData.description}`);
 
     const filePath = fileData.result.file_path;
     const imageUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
 
-    // Upload using existing function
+    // Upload image using uploadImageFromUrl
     return await uploadImageFromUrl(imageUrl, path);
   } catch (error) {
     console.error('Error uploading Telegram photo:', error);
@@ -76,4 +68,4 @@ async function uploadTelegramPhoto(fileId: string, botToken: string, path: strin
   }
 }
 
-export { db, collection, addDoc, auth, storage, uploadImageFromUrl, uploadTelegramPhoto };
+export { db, collection, addDoc, storage, uploadImageFromUrl, uploadTelegramPhoto };
