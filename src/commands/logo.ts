@@ -6,7 +6,6 @@ import path from 'path';
 const fontsDir = path.resolve(__dirname, '../assets/fonts');
 const fontFamilies: string[] = [];
 
-// Register fonts
 fs.readdirSync(fontsDir).forEach((file) => {
   const filePath = path.join(fontsDir, file);
   if (fs.statSync(filePath).isFile() && /\.(ttf|otf)$/i.test(file)) {
@@ -28,11 +27,11 @@ function getRandomFont(): string {
 
 function getRandomColor(): { primary: string; secondary: string } {
   const colors = [
-    { primary: '#f59e0b', secondary: '#fb923c' }, // Orange
-    { primary: '#dc2626', secondary: '#f87171' }, // Red
-    { primary: '#16a34a', secondary: '#4ade80' }, // Green
-    { primary: '#2563eb', secondary: '#60a5fa' }, // Blue
-    { primary: '#d946ef', secondary: '#f472b6' }, // Purple
+    { primary: '#f59e0b', secondary: '#fb923c' },
+    { primary: '#dc2626', secondary: '#f87171' },
+    { primary: '#16a34a', secondary: '#4ade80' },
+    { primary: '#2563eb', secondary: '#60a5fa' },
+    { primary: '#d946ef', secondary: '#f472b6' },
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 }
@@ -66,7 +65,7 @@ function calculateDaysUntilTarget(): string {
 
 async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUsed: string, quoteUsed: string }> {
   const width = 1200;
-  const height = 900; // 4:3 aspect ratio
+  const height = 900;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -74,7 +73,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   const { primary: color, secondary: secondaryColor } = getRandomColor();
   const quote = getRandomQuote();
 
-  // Enhanced Background Gradient
   const bgGradient = ctx.createLinearGradient(0, 0, width, height);
   bgGradient.addColorStop(0, '#0f172a');
   bgGradient.addColorStop(0.3, '#1e293b');
@@ -83,7 +81,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  // Subtle Sparkle Effect
   ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
   for (let i = 0; i < 50; i++) {
     const x = Math.random() * width;
@@ -93,7 +90,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
     ctx.fill();
   }
 
-  // Stopwatch Circle
   const circleX = 350;
   const circleY = height / 2;
   const circleRadius = 140;
@@ -103,7 +99,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  // Subtle Glow for Circle
   ctx.shadowColor = `${color}66`;
   ctx.shadowBlur = 20;
   ctx.beginPath();
@@ -112,7 +107,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Clock Markers
   for (let i = 0; i < 12; i++) {
     const angle = i * 30 * (Math.PI / 180);
     const dotX = circleX + Math.cos(angle) * (circleRadius - 20);
@@ -123,7 +117,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
     ctx.fill();
   }
 
-  // Center Text (Days)
   let fontSize = 100;
   ctx.font = `bold ${fontSize}px "${fontFamily}"`;
   while (ctx.measureText(daysText).width > circleRadius * 1.6 && fontSize > 30) {
@@ -138,9 +131,8 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillText(daysText, circleX, circleY);
   ctx.shadowBlur = 0;
 
-  // Stopwatch Knobs
   ctx.fillStyle = color;
-  ctx.fillRect(circleX - 30, circleY - circleRadius - 25, 60, 30); // Top knob
+  ctx.fillRect(circleX - 30, circleY - circleRadius - 25, 60, 30);
   ctx.fillStyle = secondaryColor;
   ctx.save();
   ctx.translate(circleX - circleRadius - 15, circleY - circleRadius + 15);
@@ -148,11 +140,9 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillRect(-20, -20, 40, 20);
   ctx.restore();
 
-  // Text Section
   const textX = 650;
   const textY = height / 2 - 100;
 
-  // Decorative Lines Around Text Section
   ctx.strokeStyle = `${color}80`;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -162,17 +152,14 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.lineTo(textX + 150, textY + 230);
   ctx.stroke();
 
-  // "DAYS" Text
   ctx.font = `bold 50px "${fontFamily}"`;
   ctx.fillStyle = color;
   ctx.fillText('DAYS', textX, textY);
 
-  // "LEFT" Text
   ctx.font = `extrabold 80px "${fontFamily}"`;
   ctx.fillStyle = '#ffffff';
   ctx.fillText('LEFT', textX, textY + 80);
 
-  // "For NEET" Text
   ctx.font = `bold 50px "${fontFamily}"`;
   ctx.fillStyle = secondaryColor;
   ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -180,12 +167,10 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.fillText('For NEET', textX, textY + 140);
   ctx.shadowBlur = 0;
 
-  // "Until May 3, 2026" Text
   ctx.font = `italic 32px "${fontFamily}"`;
   ctx.fillStyle = '#f1f5f9';
   ctx.fillText('Until May 3, 2026', textX, textY + 190);
 
-  // Quote Text with Background Box
   let quoteFontSize = 30;
   ctx.font = `italic ${quoteFontSize}px "${fontFamily}"`;
   const quoteWords = quote.split(' ');
@@ -202,7 +187,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   }
   if (currentLine) quoteLines.push(currentLine);
 
-  // Quote Background Box
   const quoteBoxWidth = width * 0.8;
   const quoteBoxHeight = quoteLines.length * 40 + 40;
   const quoteBoxX = width / 2 - quoteBoxWidth / 2;
@@ -212,14 +196,12 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.roundRect(quoteBoxX, quoteBoxY, quoteBoxWidth, quoteBoxHeight, 20);
   ctx.fill();
 
-  // Quote Text
   ctx.fillStyle = '#f1f5f9';
   ctx.textAlign = 'center';
   quoteLines.forEach((line, index) => {
     ctx.fillText(line, width / 2, quoteBoxY + 30 + index * 40);
   });
 
-  // Decorative Arrow
   ctx.fillStyle = secondaryColor;
   ctx.beginPath();
   ctx.moveTo(width - 100, 50);
@@ -232,7 +214,6 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   ctx.closePath();
   ctx.fill();
 
-  // Outer Border
   ctx.strokeStyle = color;
   ctx.lineWidth = 8;
   ctx.strokeRect(15, 15, width - 30, height - 30);
@@ -240,11 +221,13 @@ async function generateLogo(daysText: string): Promise<{ buffer: Buffer, fontUse
   return { buffer: canvas.toBuffer('image/png'), fontUsed: fontFamily, quoteUsed: quote };
 }
 
-// Telegraf Command
 const logoCommand = () => async (ctx: Context) => {
   try {
     const message = ctx.message;
-    const text = message?.text || '';
+    if (!message || !('text' in message)) {
+      return ctx.reply('❗ *Usage:* `/countdown` to generate a countdown image until May 3, 2026 for NEET', { parse_mode: 'Markdown' });
+    }
+    const text = message.text;
     const match = text.match(/^\/countdown\b/i);
 
     if (!match) {
