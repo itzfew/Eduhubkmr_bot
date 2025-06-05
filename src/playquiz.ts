@@ -1,5 +1,4 @@
 import { Context } from 'telegraf';
-import { CallbackQuery } from '@telegraf/types'; // correct types
 import axios from 'axios';
 
 interface Paper {
@@ -18,7 +17,7 @@ interface ExamCategory {
 
 let examsData: ExamCategory[] = [];
 
-const ITEMS_PER_PAGE = 6; // show 6 items per page
+const ITEMS_PER_PAGE = 6;
 
 export function playquiz() {
   return async (ctx: Context) => {
@@ -117,7 +116,6 @@ export function handleQuizActions() {
 
     const callbackData = callbackQuery.data;
 
-    // Pagination for exams
     if (callbackData.startsWith('exams_page_')) {
       const page = parseInt(callbackData.replace('exams_page_', ''));
       await showExams(ctx, page);
@@ -125,7 +123,6 @@ export function handleQuizActions() {
       return;
     }
 
-    // Pagination for papers
     if (callbackData.startsWith('papers_')) {
       const [_, examTitleRaw, __, pageStr] = callbackData.split('_');
       const examTitle = decodeURIComponent(examTitleRaw);
@@ -135,7 +132,6 @@ export function handleQuizActions() {
       return;
     }
 
-    // Selecting an exam
     if (callbackData.startsWith('exam_')) {
       const examTitle = decodeURIComponent(callbackData.replace('exam_', ''));
       await showPapers(ctx, examTitle, 0);
@@ -143,7 +139,6 @@ export function handleQuizActions() {
       return;
     }
 
-    // Selecting a paper
     if (callbackData.startsWith('paper_')) {
       const metaId = callbackData.replace('paper_', '');
 
@@ -163,8 +158,12 @@ export function handleQuizActions() {
 
       const playLink = `https://quizes.pages.dev/play?metaId=${selectedPaper.metaId}`;
 
-      await ctx.replyWithMarkdownV2(`▶️ [Start ${selectedPaper.title}](${playLink})`, {
-        disable_web_page_preview: true
+      await ctx.sendMessage(`▶️ [Start ${selectedPaper.title}](${playLink})`, {
+        parse_mode: 'MarkdownV2',
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [[{ text: '🔙 Back to Exams', callback_data: 'exams_page_0' }]],
+        },
       });
       await ctx.answerCbQuery();
     }
