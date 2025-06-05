@@ -29,20 +29,17 @@ signInAnonymously(auth)
     console.error('Anonymous sign-in failed:', error);
   });
 
-// Function to upload image URL to Firebase Storage and get download URL
+// Upload image from URL to Firebase Storage
 async function uploadImageFromUrl(imageUrl: string, path: string): Promise<string | null> {
   try {
-    // Fetch the image as a blob
     const response = await fetch(imageUrl);
     const blob = await response.blob();
     const storageRef = ref(storage, path);
-
-    // Convert blob to base64 for uploadString
     const reader = new FileReader();
     return new Promise((resolve, reject) => {
       reader.onloadend = async () => {
         try {
-          const base64Data = (reader.result as string).split(',')[1]; // Remove data URL prefix
+          const base64Data = (reader.result as string).split(',')[1];
           await uploadString(storageRef, base64Data, 'base64');
           const downloadUrl = await getDownloadURL(storageRef);
           resolve(downloadUrl);
@@ -60,4 +57,23 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
   }
 }
 
-export { db, collection, addDoc, auth, storage, uploadImageFromUrl };
+// Upload Telegram photo to Firebase Storage
+async function uploadTelegramPhoto(fileId: string, botToken: string, path: string): Promise<string | null> {
+  try {
+    // Get file path from Telegram
+    const fileResponse = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+    const fileData = await fileResponse.json();
+    if (!fileData.ok) throw new Error(fileData.description);
+
+    const filePath = fileData.result.file_path;
+    const imageUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+
+    // Upload using existing function
+    return await uploadImageFromUrl(imageUrl, path);
+  } catch (error) {
+    console.error('Error uploading Telegram photo:', error);
+    return null;
+  }
+}
+
+export { db, collection, addDoc, auth, storage, uploadImageFromUrl, uploadTelegramPhoto };
