@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, ref, push, set } from './utils/firebase';
+import { db, collection, addDoc } from './utils/firebase'; // Updated imports for Firestore
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -419,18 +419,17 @@ bot.on('message', async (ctx) => {
         `then send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`
       );
     } else {
-      // Save all questions to Firebase
+      // Save all questions to Firestore
       try {
-        const questionsRef = ref(db, 'questions');
+        const questionsCollection = collection(db, 'questions');
         for (const q of submission.questions) {
-          const newQuestionRef = push(questionsRef);
-          await set(newQuestionRef, q);
+          await addDoc(questionsCollection, q);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
       } catch (error) {
-        console.error('Failed to save questions to Firebase:', error);
-        await ctx.reply('❌ Error: Unable to save questions to Firebase.');
+        console.error('Failed to save questions to Firestore:', error);
+        await ctx.reply('❌ Error: Unable to save questions to Firestore.');
       }
     }
     return;
@@ -464,11 +463,10 @@ bot.on('message', async (ctx) => {
     const poll = msg.poll;
     const pollJson = JSON.stringify(poll, null, 2);
 
-    // Save poll data to Firebase Realtime Database under /polls/
+    // Save poll data to Firestore under /polls/
     try {
-      const pollsRef = ref(db, 'polls');
-      const newPollRef = push(pollsRef);
-      await set(newPollRef, {
+      const pollsCollection = collection(db, 'polls');
+      await addDoc(pollsCollection, {
         poll,
         from: {
           id: ctx.from?.id,
@@ -483,7 +481,7 @@ bot.on('message', async (ctx) => {
         receivedAt: Date.now(),
       });
     } catch (error) {
-      console.error('Firebase save error:', error);
+      console.error('Firestore save error:', error);
     }
     await ctx.reply('Thanks for sending a poll! Your poll data has been sent to the admin.');
 
