@@ -39,16 +39,11 @@ interface PendingQuestion {
     questionImage?: string;
     from: { id: number };
   }>;
-  expectingImageOrPollForQuestionNumber?: number;
-  awaitingChapterSelection?: boolean;
+  expectingImageOrPollForQuestionNumber?: number; // Track which question is awaiting an image or poll
+  awaitingChapterSelection?: boolean; // Track if waiting for chapter number
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
-
-// Sanitize chapter name for Storage paths
-function sanitizePath(str: string): string {
-  return str.replace(/[^a-zA-Z0-9_-]/g, '_');
-}
 
 // --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
@@ -105,7 +100,7 @@ async function fetchChapters(subject: string): Promise<string[]> {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
     const data = await res.json();
-    const chapters = [...new Set(data.map((item: any) => item.chapter))];
+    const chapters = [...new Set(data.map((item: any) => item.chapter))]; // Unique chapters
     return chapters.sort();
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
@@ -138,9 +133,11 @@ bot.command('users', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
   }
+
   try {
     const chatIds = await fetchChatIdsFromSheet();
     const totalUsers = chatIds.length;
+
     await ctx.reply(`📊 Total users: ${totalUsers}`, {
       parse_mode: 'Markdown',
       reply_markup: {
@@ -159,9 +156,11 @@ bot.action('refresh_users', async (ctx) => {
     await ctx.answerCbQuery('Unauthorized');
     return;
   }
+
   try {
     const chatIds = await fetchChatIdsFromSheet();
     const totalUsers = chatIds.length;
+
     await ctx.editMessageText(`📊 Total users: ${totalUsers} (refreshed)`, {
       parse_mode: 'Markdown',
       reply_markup: {
@@ -178,18 +177,23 @@ bot.action('refresh_users', async (ctx) => {
 // Broadcast to all saved chat IDs
 bot.command('broadcast', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
+
   const msg = ctx.message.text?.split(' ').slice(1).join(' ');
   if (!msg) return ctx.reply('Usage:\n/broadcast Your message here');
+
   let chatIds: number[] = [];
+
   try {
     chatIds = await fetchChatIdsFromSheet();
   } catch (err) {
     console.error('Failed to fetch chat IDs:', err);
     return ctx.reply('❌ Error: Unable to fetch chat IDs from Google Sheet.');
   }
+
   if (chatIds.length === 0) {
     return ctx.reply('No users to broadcast to.');
   }
+
   let success = 0;
   for (const id of chatIds) {
     try {
@@ -199,22 +203,27 @@ bot.command('broadcast', async (ctx) => {
       console.log(`Failed to send to ${id}`, err);
     }
   }
+
   await ctx.reply(`✅ Broadcast sent to ${success} users.`);
 });
 
 // Admin reply to user via command
 bot.command('reply', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
+
   const parts = ctx.message.text?.split(' ');
   if (!parts || parts.length < 3) {
     return ctx.reply('Usage:\n/reply <chat_id> <message>');
   }
+
   const chatIdStr = parts[1].trim();
   const chatId = Number(chatIdStr);
   const message = parts.slice(2).join(' ');
+
   if (isNaN(chatId)) {
     return ctx.reply(`Invalid chat ID: ${chatIdStr}`);
   }
+
   try {
     await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}`, { parse_mode: 'Markdown' });
     await ctx.reply(`Reply sent to ${chatId}`, { parse_mode: 'Markdown' });
@@ -229,14 +238,18 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
   }
-  const command = ctx.message.text?.split(' ')[0].substring(1);
+
+  const command = ctx.message.text?.split(' ')[0].substring(1); // Remove leading '/'
   const countStr = ctx.message.text?.split(' ')[1];
   const count = parseInt(countStr, 10);
+
   if (!countStr || isNaN(count) || count <= 0) {
     return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
   }
+
   let subject = '';
   let chapter = 'Random';
+
   if (command.includes('__')) {
     const [subj, chp] = command.split('__');
     subject = subj.replace('add', '').replace(/_/g, ' ');
@@ -244,13 +257,19 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   } else {
     subject = command.replace('add', '').replace(/_/g, ' ');
   }
+
+  // Fetch chapters for the subject
   const chapters = await fetchChapters(subject);
   if (chapters.length === 0) {
     return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
   }
+
+  // Create numbered list of chapters
   const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
   const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
   const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
+
+  // Store pending submission with flag for chapter selection
   pendingSubmissions[ctx.from.id] = {
     subject,
     chapter,
@@ -259,6 +278,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     expectingImageOrPollForQuestionNumber: undefined,
     awaitingChapterSelection: true,
   };
+
   const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
                     (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
   await ctx.reply(replyText, { parse_mode: 'Markdown' });
@@ -278,11 +298,18 @@ bot.on('callback_query', handleQuizActions());
 // --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
-  const msg = ctx.message as any;
+  const msg = ctx.message as any; // Avoid TS for ctx.message.poll/photo
   const chatType = chat.type;
+
   if (!chat?.id) return;
+
+  // Save chat ID locally
   saveChatId(chat.id);
+
+  // Save to Google Sheet and check if user is new
   const alreadyNotified = await saveToSheet(chat);
+
+  // Notify admin once only for new users (private chat)
   if (chat.id !== ADMIN_ID && !alreadyNotified) {
     if (chat.type === 'private' && 'first_name' in chat) {
       const usernameText = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
@@ -293,11 +320,14 @@ bot.on('message', async (ctx) => {
       );
     }
   }
+
+  // Handle /contact messages
   if (msg.text?.startsWith('/contact')) {
     const userMessage = msg.text.replace('/contact', '').trim() || msg.reply_to_message?.text;
     if (userMessage) {
       const firstName = 'first_name' in chat ? chat.first_name : 'Unknown';
       const username = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
+
       await ctx.telegram.sendMessage(
         ADMIN_ID,
         `*Contact Message from ${firstName} (${username})*\nChat ID: ${chat.id}\n\nMessage:\n${userMessage}`,
@@ -309,6 +339,8 @@ bot.on('message', async (ctx) => {
     }
     return;
   }
+
+  // Admin replies via swipe reply
   if (chat.id === ADMIN_ID && msg.reply_to_message?.text) {
     const match = msg.reply_to_message.text.match(/Chat ID: (\d+)/);
     if (match) {
@@ -321,17 +353,22 @@ bot.on('message', async (ctx) => {
     }
     return;
   }
+
+  // Handle chapter selection for admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
     const submission = pendingSubmissions[chat.id];
     const chapterNumber = parseInt(msg.text.trim(), 10);
+
     const chapters = await fetchChapters(submission.subject);
     if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > chapters.length) {
       await ctx.reply(`Please enter a valid chapter number between 1 and ${chapters.length}.`);
       return;
     }
+
     submission.chapter = chapters[chapterNumber - 1];
     submission.awaitingChapterSelection = false;
-    submission.expectingImageOrPollForQuestionNumber = 1;
+    submission.expectingImageOrPollForQuestionNumber = 1; // Start with first question
+
     await ctx.reply(
       `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
       `Please send an image for question 1 (optional) or send the quiz poll directly to proceed without an image. ` +
@@ -340,18 +377,21 @@ bot.on('message', async (ctx) => {
     );
     return;
   }
+
+  // Handle image for admin question submissions
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
-    const photo = msg.photo[msg.photo.length - 1];
+
+    const photo = msg.photo[msg.photo.length - 1]; // Get highest resolution
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
-    const sanitizedChapter = sanitizePath(submission.chapter);
-    const imagePath = `questions/${sanitizedChapter}/${questionId}/question.jpg`;
+    const imagePath = `questions/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
       if (downloadUrl) {
+        // Store question with image URL
         submission.questions.push({
           question: '',
           options: [],
@@ -360,6 +400,7 @@ bot.on('message', async (ctx) => {
           questionImage: downloadUrl,
           from: { id: ctx.from?.id },
         });
+
         await ctx.reply(
           `Image for question ${questionNumber} saved. Please send the quiz poll for question ${questionNumber} ` +
           `with the question, 4 options, a correct answer, and an explanation.`,
@@ -374,9 +415,13 @@ bot.on('message', async (ctx) => {
     }
     return;
   }
+
+  // Handle explicit "skip" for admin question submissions
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.text?.toLowerCase() === 'skip') {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
+
+    // Store question without image
     submission.questions.push({
       question: '',
       options: [],
@@ -385,6 +430,7 @@ bot.on('message', async (ctx) => {
       questionImage: null,
       from: { id: ctx.from?.id },
     });
+
     await ctx.reply(
       `No image for question ${questionNumber}. Please send the quiz poll for question ${questionNumber} ` +
       `with the question, 4 options, a correct answer, and an explanation.`,
@@ -392,23 +438,32 @@ bot.on('message', async (ctx) => {
     );
     return;
   }
+
+  // Handle quiz poll submissions from admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.questions.length + 1;
+    const questionNumber = submission.questions.length + 1; // Next question number
+
     const poll = msg.poll;
+
     if (poll.type !== 'quiz') {
       await ctx.reply('Please send a quiz poll with a correct answer and explanation.');
       return;
     }
+
     if (poll.options.length !== 4) {
       await ctx.reply('Quiz polls must have exactly 4 options.');
       return;
     }
+
     if (!poll.explanation) {
       await ctx.reply('Quiz polls must include an explanation.');
       return;
     }
+
     const correctOptionIndex = poll.correct_option_id;
+
+    // If expecting an image/poll and no image was provided, create a question with no image
     if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
       submission.questions.push({
         question: poll.question,
@@ -419,6 +474,7 @@ bot.on('message', async (ctx) => {
         from: { id: ctx.from?.id },
       });
     } else if (submission.questions.length > 0 && submission.questions[questionNumber - 2].question === '') {
+      // Update the last question with poll data (image already provided)
       const lastQuestion = submission.questions[questionNumber - 2];
       lastQuestion.question = poll.question;
       lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
@@ -428,6 +484,7 @@ bot.on('message', async (ctx) => {
       await ctx.reply('Please send an image, reply "skip", or ensure the previous question is completed before sending a poll.');
       return;
     }
+
     if (submission.questions.length < submission.count) {
       submission.expectingImageOrPollForQuestionNumber = submission.questions.length + 1;
       await ctx.reply(
@@ -436,6 +493,7 @@ bot.on('message', async (ctx) => {
         { parse_mode: 'Markdown' }
       );
     } else {
+      // Save all questions to Firestore under questions/{chapter}/question
       try {
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
@@ -451,6 +509,7 @@ bot.on('message', async (ctx) => {
             createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
+          // Save to questions/{chapter}/question/{questionId}
           const chapterDocRef = collection(db, 'questions', submission.chapter, 'question');
           await addDoc(chapterDocRef, questionData);
         }
@@ -467,9 +526,13 @@ bot.on('message', async (ctx) => {
     }
     return;
   }
+
+  // Detect Telegram Poll and send JSON to admin
   if (msg.poll) {
     const poll = msg.poll;
     const pollJson = JSON.stringify(poll, null, 2);
+
+    // Save poll data to Firestore under /polls/
     try {
       const pollsCollection = collection(db, 'polls');
       await addDoc(pollsCollection, {
@@ -495,14 +558,20 @@ bot.on('message', async (ctx) => {
       }
     }
     await ctx.reply('Thanks for sending a poll! Your poll data has been sent to the admin.');
+
     await ctx.telegram.sendMessage(
       ADMIN_ID,
       `📊 *New Telegram Poll received from @${ctx.from?.username || 'unknown'}:*\n\`\`\`json\n${pollJson}\n\`\`\``,
       { parse_mode: 'Markdown' }
     );
+
     return;
   }
+
+  // Run quiz for all chats
   await quizes()(ctx);
+
+  // Greet in private chats
   if (isPrivateChat(chatType)) {
     await greeting()(ctx);
   }
