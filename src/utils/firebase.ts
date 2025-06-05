@@ -1,6 +1,6 @@
 // src/utils/firebase.ts
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, push, set, onValue, remove } from 'firebase/database';
+import { getFirestore, collection, addDoc } from 'firebase/firestore';
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
@@ -15,6 +15,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db = getFirestore(app);
 
-export { db, ref, push, set, onValue, remove };
+export { db, collection, addDoc };
