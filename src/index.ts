@@ -34,13 +34,13 @@ interface PendingQuestion {
   questions: Array<{
     question: string;
     options: Array<{ type: string; value: string }>;
-    correctOption: number | null; // Allow null for polls without a correct answer
-    explanation: string | null; // Allow null for no explanation
-    questionImage?: string;
+    correctOption: number | null;
+    explanation: string | null | undefined;
+    questionImage?: string | null | undefined;
     from: { id: number };
   }>;
-  expectingImageOrPollForQuestionNumber?: number; // Track which question is awaiting an image or poll
-  awaitingChapterSelection?: boolean; // Track if waiting for chapter number
+  expectingImageOrPollForQuestionNumber?: number;
+  awaitingChapterSelection?: boolean;
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
@@ -99,8 +99,8 @@ async function fetchChapters(subject: string): Promise<string[]> {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
-    const data = await res.json();
-    const chapters = [...new Set(data.map((item: any) => item.chapter))]; // Unique chapters
+    const data: { chapter: string }[] = await res.json();
+    const chapters = [...new Set(data.map((item) => item.chapter))];
     return chapters.sort();
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
@@ -239,7 +239,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     return ctx.reply('You are not authorized to use this command.');
   }
 
-  const command = ctx.message.text?.split(' ')[0].substring(1); // Remove leading '/'
+  const command = ctx.message.text?.split(' ')[0].substring(1);
   const countStr = ctx.message.text?.split(' ')[1];
   const count = parseInt(countStr, 10);
 
@@ -258,18 +258,15 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     subject = command.replace('add', '').replace(/_/g, ' ');
   }
 
-  // Fetch chapters for the subject
   const chapters = await fetchChapters(subject);
   if (chapters.length === 0) {
     return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
   }
 
-  // Create numbered list of chapters
   const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
   const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
   const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
 
-  // Store pending submission with flag for chapter selection
   pendingSubmissions[ctx.from.id] = {
     subject,
     chapter,
@@ -298,18 +295,15 @@ bot.on('callback_query', handleQuizActions());
 // --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
-  const msg = ctx.message as any; // Avoid TS for ctx.message.poll/photo
+  const msg = ctx.message as any;
   const chatType = chat.type;
 
   if (!chat?.id) return;
 
-  // Save chat ID locally
   saveChatId(chat.id);
 
-  // Save to Google Sheet and check if user is new
   const alreadyNotified = await saveToSheet(chat);
 
-  // Notify admin once only for new users (private chat)
   if (chat.id !== ADMIN_ID && !alreadyNotified) {
     if (chat.type === 'private' && 'first_name' in chat) {
       const usernameText = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
@@ -321,7 +315,6 @@ bot.on('message', async (ctx) => {
     }
   }
 
-  // Handle /contact messages
   if (msg.text?.startsWith('/contact')) {
     const userMessage = msg.text.replace('/contact', '').trim() || msg.reply_to_message?.text;
     if (userMessage) {
@@ -340,7 +333,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Admin replies via swipe reply
   if (chat.id === ADMIN_ID && msg.reply_to_message?.text) {
     const match = msg.reply_to_message.text.match(/Chat ID: (\d+)/);
     if (match) {
@@ -354,7 +346,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle chapter selection for admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
     const submission = pendingSubmissions[chat.id];
     const chapterNumber = parseInt(msg.text.trim(), 10);
@@ -367,7 +358,7 @@ bot.on('message', async (ctx) => {
 
     submission.chapter = chapters[chapterNumber - 1];
     submission.awaitingChapterSelection = false;
-    submission.expectingImageOrPollForQuestionNumber = 1; // Start with first question
+    submission.expectingImageOrPollForQuestionNumber = 1;
 
     await ctx.reply(
       `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
@@ -378,14 +369,11 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle image for admin question submissions
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
 
-   
-
-    const photo = msg.photo[msg.photo.length - 1]; // Get highest resolution
+    const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
     const imagePath = `questions/${questionId}/question.jpg`;
@@ -393,7 +381,6 @@ bot.on('message', async (ctx) => {
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
       if (downloadUrl) {
-        // Store question with image URL
         submission.questions.push({
           question: '',
           options: [],
@@ -418,12 +405,10 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle explicit "skip" for admin question submissions
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.text?.toLowerCase() === 'skip') {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
 
-    // Store question without image
     submission.questions.push({
       question: '',
       options: [],
@@ -441,14 +426,12 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Handle poll submissions from admin (all types, with or without explanation, any number of options)
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.questions.length + 1; // Next question number
+    const questionNumber = submission.questions.length + 1;
 
     const poll = msg.poll;
 
-    // If expecting an image/poll and no image was provided, create a question with no image
     if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
       submission.questions.push({
         question: poll.question,
@@ -459,7 +442,6 @@ bot.on('message', async (ctx) => {
         from: { id: ctx.from?.id },
       });
     } else if (submission.questions.length > 0 && submission.questions[questionNumber - 2].question === '') {
-      // Update the last question with poll data (image already provided)
       const lastQuestion = submission.questions[questionNumber - 2];
       lastQuestion.question = poll.question;
       lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
@@ -478,7 +460,6 @@ bot.on('message', async (ctx) => {
         { parse_mode: 'Markdown' }
       );
     } else {
-      // Save all questions to Firestore
       try {
         const questionsCollection = collection(db, 'questions');
         for (const q of submission.questions) {
@@ -511,7 +492,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Forward polls to admin as-is
   if (msg.poll && ctx.from?.id !== ADMIN_ID) {
     try {
       await ctx.telegram.forwardMessage(ADMIN_ID, chat.id, msg.message_id);
@@ -521,10 +501,8 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Run quiz for all chats
   await quizes()(ctx);
 
-  // Greet in private chats
   if (isPrivateChat(chatType)) {
     await greeting()(ctx);
   }
