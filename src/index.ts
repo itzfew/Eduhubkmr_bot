@@ -39,7 +39,7 @@ interface PendingQuestion {
     questionImage?: string;
     from: { id: number };
   }>;
-  expectingImageForQuestionNumber?: number; // Track which question is awaiting an image or poll
+  expectingImageOrPollForQuestionNumber?: number; // Track which question is awaiting an image or poll
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
 }
 
@@ -275,7 +275,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     chapter,
     count,
     questions: [],
-    expectingImageForQuestionNumber: undefined,
+    expectingImageOrPollForQuestionNumber: undefined,
     awaitingChapterSelection: true,
   };
 
@@ -493,9 +493,8 @@ bot.on('message', async (ctx) => {
         { parse_mode: 'Markdown' }
       );
     } else {
-      // Save all questions to Firestore
+      // Save all questions to Firestore under questions/{chapter}/question
       try {
-        const questionsCollection = collection(db, 'questions');
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
           const questionData = {
@@ -510,7 +509,9 @@ bot.on('message', async (ctx) => {
             createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
-          await addDoc(questionsCollection, questionData);
+          // Save to questions/{chapter}/question/{questionId}
+          const chapterDocRef = collection(db, 'questions', submission.chapter, 'question');
+          await addDoc(chapterDocRef, questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
