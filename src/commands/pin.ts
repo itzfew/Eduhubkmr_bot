@@ -1,5 +1,5 @@
 import { Context, Telegraf } from 'telegraf';
-import { db, ref, set, onValue, remove, off } from '../utils/firebase';
+import { realtimeDb, ref, set, onValue, remove, off } from '../utils/firebase'; // Use realtimeDb instead of db
 
 // Target NEET exam date
 const NEET_DATE = new Date('2026-05-03T00:00:00+05:30'); // IST timezone
@@ -52,7 +52,7 @@ const isAdmin = async (ctx: Context, userId: number, chatId: number) => {
 // Function to save/update pinned message in Firebase
 const savePinnedMessage = async (chatId: number, messageId: number) => {
   try {
-    const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
+    const pinnedRef = ref(realtimeDb, `pinnedMessages/${chatId}`); // Use realtimeDb
     await set(pinnedRef, { messageId, lastUpdated: Date.now() });
   } catch (error) {
     console.error('Error saving pinned message to Firebase:', error);
@@ -99,7 +99,7 @@ export const pin = () => async (ctx: Context) => {
   }
 
   // Check if a countdown is already active
-  const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
+  const pinnedRef = ref(realtimeDb, `pinnedMessages/${chatId}`); // Use realtimeDb
   try {
     const snapshot = await new Promise((resolve) => {
       onValue(pinnedRef, resolve, { onlyOnce: true });
@@ -149,7 +149,7 @@ export const stopCountdown = () => async (ctx: Context) => {
 
   // Remove pinned message data from Firebase
   try {
-    const pinnedRef = ref(db, `pinnedMessages/${chatId}`);
+    const pinnedRef = ref(realtimeDb, `pinnedMessages/${chatId}`); // Use realtimeDb
     const snapshot = await new Promise((resolve) => {
       onValue(pinnedRef, resolve, { onlyOnce: true });
     });
@@ -197,7 +197,7 @@ export const setupDailyUpdateListener = (bot: Telegraf<Context>) => {
 
   // Set up interval-based daily updates (instead of Firebase listener)
   setInterval(async () => {
-    const pinnedMessagesRef = ref(db, 'pinnedMessages');
+    const pinnedMessagesRef = ref(realtimeDb, 'pinnedMessages'); // Use realtimeDb
     const snapshot = await new Promise((resolve) => {
       onValue(pinnedMessagesRef, resolve, { onlyOnce: true });
     });
