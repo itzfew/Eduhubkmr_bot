@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
+import { getDatabase, ref as dbRef, set, onValue, remove, off } from 'firebase/database';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -19,6 +20,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
+const realtimeDb = getDatabase(app);
 
 // Sign in anonymously on initialization
 signInAnonymously(auth)
@@ -39,9 +41,9 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
     const buffer = Buffer.from(arrayBuffer);
     const base64Data = buffer.toString('base64');
     
-    const storageRef = ref(storage, path);
-    await uploadString(storageRef, base64Data, 'base64');
-    const downloadUrl = await getDownloadURL(storageRef);
+    const storageReference = storageRef(storage, path);
+    await uploadString(storageReference, base64Data, 'base64');
+    const downloadUrl = await getDownloadURL(storageReference);
     return downloadUrl;
   } catch (error) {
     console.error('Error uploading image from URL:', error);
@@ -68,4 +70,17 @@ async function uploadTelegramPhoto(fileId: string, botToken: string, path: strin
   }
 }
 
-export { db, collection, addDoc, storage, uploadImageFromUrl, uploadTelegramPhoto };
+export {
+  db,
+  collection,
+  addDoc,
+  storage,
+  uploadImageFromUrl,
+  uploadTelegramPhoto,
+  realtimeDb,
+  dbRef as ref,
+  set,
+  onValue,
+  remove,
+  off
+};
