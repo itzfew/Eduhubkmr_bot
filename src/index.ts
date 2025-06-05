@@ -21,7 +21,7 @@ import { logoCommand } from './commands/logo';
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
-letordre: let accessToken: string | null = null;
+let accessToken: string | null = null;
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
@@ -383,6 +383,8 @@ bot.on('message', async (ctx) => {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
 
+   
+
     const photo = msg.photo[msg.photo.length - 1]; // Get highest resolution
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
@@ -509,44 +511,13 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  // Detect Telegram Poll and send JSON to admin
-  if (msg.poll) {
-    const poll = msg.poll;
-    const pollJson = JSON.stringify(poll, null, 2);
-
-    // Save poll data to Firestore under /polls/
+  // Forward polls to admin as-is
+  if (msg.poll && ctx.from?.id !== ADMIN_ID) {
     try {
-      const pollsCollection = collection(db, 'polls');
-      await addDoc(pollsCollection, {
-        poll,
-        from: {
-          id: ctx.from?.id,
-          username: ctx.from?.username || null,
-          first_name: ctx.from?.first_name || null,
-          last_name: ctx.from?.last_name || null,
-        },
-        chat: {
-          id: ctx.chat.id,
-          type: ctx.chat.type,
-        },
-        receivedAt: Date.now(),
-      });
-    } catch (error: any) {
-      console.error('Firestore save error:', error);
-      if (error.code === 'permission-denied') {
-        await ctx.reply('❌ Error: Insufficient permissions to save poll to Firestore. Please check Firebase configuration.');
-      } else {
-        await ctx.reply('❌ Error: Unable to save poll to Firestore.');
-      }
+      await ctx.telegram.forwardMessage(ADMIN_ID, chat.id, msg.message_id);
+    } catch (error) {
+      console.error('Failed to forward poll to admin:', error);
     }
-    await ctx.reply('Thanks for sending a poll! Your poll data has been sent to the admin.');
-
-    await ctx.telegram.sendMessage(
-      ADMIN_ID,
-      `📊 *New Telegram Poll received from @${ctx.from?.username || 'unknown'}:*\n\`\`\`json\n${pollJson}\n\`\`\``,
-      { parse_mode: 'Markdown' }
-    );
-
     return;
   }
 
