@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, storage, uploadImageFromUrl } from './utils/firebase'; // Updated imports
+import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -39,7 +39,7 @@ interface PendingQuestion {
     questionImage?: string;
     from: { id: number };
   }>;
-  expectingImageFor?: string; // Track poll ID awaiting an image
+  expectingImageForQuestionNumber?: number; // Track which question is awaiting an image
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
 }
 
@@ -275,7 +275,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     chapter,
     count,
     questions: [],
-    expectingImageFor: undefined,
+    expectingImageForQuestionNumber: undefined,
     awaitingChapterSelection: true,
   };
 
@@ -298,7 +298,7 @@ bot.on('callback_query', handleQuizActions());
 // --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
-  const msg = ctx.message as any; // Avoid TS for ctx.message.poll
+  const msg = ctx.message as any; // Avoid TS for ctx.message.poll/photo
   const chatType = chat.type;
 
   if (!chat?.id) return;
@@ -367,20 +367,93 @@ bot.on('message', async (ctx) => {
 
     submission.chapter = chapters[chapterNumber - 1];
     submission.awaitingChapterSelection = false;
+    submission.expectingImageForQuestionNumber = 1; // Start with first question
 
     await ctx.reply(
       `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
-      `Please share ${submission.count} questions as Telegram quiz polls. ` +
-      `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
-      `After sending a poll, you can optionally send an image URL for the question (or reply "skip").`,
+      `Please send an image for question 1 (or reply "skip" to proceed without an image).`,
       { parse_mode: 'Markdown' }
     );
     return;
   }
 
-  // Handle question submissions from admin (quiz polls)
+  // Handle image or "skip" for admin question submissions
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageForQuestionNumber) {
+    const submission = pendingSubmissions[chat.id];
+    const questionNumber = submission.expectingImageForQuestionNumber;
+
+    // Handle photo message
+    if (msg.photo) {
+      const photo = msg.photo[msg.photo.length - 1]; // Get highest resolution
+      const fileId = photo.file_id;
+      const questionId = generateQuestionId();
+      const imagePath = `questions/${questionId}/question.jpg`;
+
+      try {
+        const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
+        if (downloadUrl) {
+          // Store question with image URL
+          submission.questions.push({
+            question: '',
+            options: [],
+            correctOption: 0,
+            explanation: '',
+            questionImage: downloadUrl,
+            from: { id: ctx.from?.id },
+          });
+          submission.expectingImageForQuestionNumber = undefined;
+
+          await ctx.reply(
+            `Image for question ${questionNumber} saved. Please send the quiz poll for question ${questionNumber} ` +
+            `with the question, 4 options, a correct answer, and an explanation.`,
+            { parse_mode: 'Markdown' }
+          );
+        } else {
+          await ctx.reply('❌ Failed to upload image. Please try again or reply "skip".');
+        }
+      } catch (error) {
+        console.error('Image upload error:', error);
+        await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or reply "skip".');
+      }
+      return;
+    }
+
+    // Handle "skip" or invalid input
+    if (msg.text) {
+      if (msg.text.toLowerCase() === 'skip') {
+        // Store question without image
+        submission.questions.push({
+          question: '',
+          options: [],
+          correctOption: 0,
+          explanation: '',
+          questionImage: null,
+          from: { id: ctx.from?.id },
+        });
+        submission.expectingImageForQuestionNumber = undefined;
+
+        await ctx.reply(
+          `No image for question ${questionNumber}. Please send the quiz poll for question ${questionNumber} ` +
+          `with the question, 4 options, a correct answer, and an explanation.`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        await ctx.reply('Please send an image for the question or reply "skip" to proceed without an image.');
+      }
+      return;
+    }
+  }
+
+  // Handle quiz poll submissions from admin
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
+    const questionNumber = submission.questions.length; // Current question being processed
+
+    if (submission.expectingImageForQuestionNumber) {
+      await ctx.reply('Please send an image or reply "skip" before sending the quiz poll.');
+      return;
+    }
+
     const poll = msg.poll;
 
     if (poll.type !== 'quiz') {
@@ -400,22 +473,19 @@ bot.on('message', async (ctx) => {
 
     const correctOptionIndex = poll.correct_option_id;
 
-    const question = {
-      question: poll.question,
-      options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })), // Text-based options
-      correctOption: correctOptionIndex,
-      explanation: poll.explanation,
-      questionImage: null, // Will be set if image URL is provided
-      from: { id: ctx.from?.id },
-    };
-
-    submission.questions.push(question);
-    submission.expectingImageFor = poll.id; // Track poll ID for potential image
+    // Update the last question with poll data
+    const lastQuestion = submission.questions[questionNumber - 1];
+    lastQuestion.question = poll.question;
+    lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
+    lastQuestion.correctOption = correctOptionIndex;
+    lastQuestion.explanation = poll.explanation;
 
     if (submission.questions.length < submission.count) {
+      submission.expectingImageForQuestionNumber = submission.questions.length + 1;
       await ctx.reply(
-        `Question ${submission.questions.length} saved. Please send an image URL for this question (or reply "skip" to proceed), ` +
-        `then send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`
+        `Question ${questionNumber} saved. Please send an image for question ${submission.questions.length + 1} ` +
+        `(or reply "skip" to proceed without an image).`,
+        { parse_mode: 'Markdown' }
       );
     } else {
       // Save all questions to Firestore
@@ -431,8 +501,8 @@ bot.on('message', async (ctx) => {
             options: q.options,
             correctOption: q.correctOption,
             explanation: q.explanation,
-            createdAt: new Date().toISOString(), // Client-side timestamp
-            createdBy: ctx.from?.id.toString(), // Use Telegram ID as createdBy
+            createdAt: new Date().toISOString(),
+            createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
           await addDoc(questionsCollection, questionData);
@@ -447,41 +517,6 @@ bot.on('message', async (ctx) => {
           await ctx.reply('❌ Error: Unable to save questions to Firestore.');
         }
       }
-    }
-    return;
-  }
-
-  // Handle image URL or skip for admin question submissions
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.text && pendingSubmissions[chat.id].expectingImageFor) {
-    const submission = pendingSubmissions[chat.id];
-    const lastQuestion = submission.questions[submission.questions.length - 1];
-
-    if (msg.text.toLowerCase() === 'skip') {
-      lastQuestion.questionImage = null;
-      submission.expectingImageFor = undefined;
-      if (submission.questions.length < submission.count) {
-        await ctx.reply(`Image skipped. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
-      }
-    } else if (msg.text.startsWith('http') && msg.text.match(/\.(jpg|jpeg|png|gif)$/i)) {
-      try {
-        const questionId = generateQuestionId(); // Generate ID early for storage path
-        const imagePath = `questions/${questionId}/question.jpg`;
-        const downloadUrl = await uploadImageFromUrl(msg.text, imagePath);
-        if (downloadUrl) {
-          lastQuestion.questionImage = downloadUrl;
-          submission.expectingImageFor = undefined;
-          if (submission.questions.length < submission.count) {
-            await ctx.reply(`Image saved. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
-          }
-        } else {
-          await ctx.reply('❌ Failed to upload image. Please try again or reply "skip".');
-        }
-      } catch (error) {
-        console.error('Image upload error:', error);
-        await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or reply "skip".');
-      }
-    } else {
-      await ctx.reply('Please send a valid image URL (jpg, jpeg, png, or gif) or reply "skip" to proceed without an image.');
     }
     return;
   }
