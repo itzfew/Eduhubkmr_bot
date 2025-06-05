@@ -37,6 +37,7 @@ interface PendingQuestion {
     correct_option: string;
     explanation: string;
     image?: string;
+    from?: { id: number }; // Added to store Telegram user ID
   }>;
   expectingImageFor?: string; // Track poll ID awaiting an image
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
@@ -408,6 +409,7 @@ bot.on('message', async (ctx) => {
       correct_option: correctOptionLetter,
       explanation: poll.explanation,
       image: '',
+      from: { id: ctx.from?.id }, // Added to satisfy security rules
     };
 
     submission.questions.push(question);
@@ -427,9 +429,13 @@ bot.on('message', async (ctx) => {
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to save questions to Firestore:', error);
-        await ctx.reply('❌ Error: Unable to save questions to Firestore.');
+        if (error.code === 'permission-denied') {
+          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase configuration.');
+        } else {
+          await ctx.reply('❌ Error: Unable to save questions to Firestore.');
+        }
       }
     }
     return;
@@ -480,8 +486,13 @@ bot.on('message', async (ctx) => {
         },
         receivedAt: Date.now(),
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Firestore save error:', error);
+      if (error.code === 'permission-denied') {
+        await ctx.reply('❌ Error: Insufficient permissions to save poll to Firestore. Please check Firebase configuration.');
+      } else {
+        await ctx.reply('❌ Error: Unable to save poll to Firestore.');
+      }
     }
     await ctx.reply('Thanks for sending a poll! Your poll data has been sent to the admin.');
 
