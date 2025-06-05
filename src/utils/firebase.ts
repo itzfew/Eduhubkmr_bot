@@ -1,8 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDIWtVfoGIWQoRVe36v6g6S3slTRRYUAgk",
   authDomain: "quizes-3028d.firebaseapp.com",
@@ -17,6 +18,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // Sign in anonymously on initialization
 signInAnonymously(auth)
@@ -27,4 +29,35 @@ signInAnonymously(auth)
     console.error('Anonymous sign-in failed:', error);
   });
 
-export { db, collection, addDoc, auth };
+// Function to upload image URL to Firebase Storage and get download URL
+async function uploadImageFromUrl(imageUrl: string, path: string): Promise<string | null> {
+  try {
+    // Fetch the image as a blob
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    const storageRef = ref(storage, path);
+
+    // Convert blob to base64 for uploadString
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onloadend = async () => {
+        try {
+          const base64Data = (reader.result as string).split(',')[1]; // Remove data URL prefix
+          await uploadString(storageRef, base64Data, 'base64');
+          const downloadUrl = await getDownloadURL(storageRef);
+          resolve(downloadUrl);
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Error fetching image:', error);
+    return null;
+  }
+}
+
+export { db, collection, addDoc, auth, storage, uploadImageFromUrl };
