@@ -21,7 +21,7 @@ import { logoCommand } from './commands/logo';
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
-let accessToken: string | null = null;
+letordre: let accessToken: string | null = null;
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
@@ -34,12 +34,12 @@ interface PendingQuestion {
   questions: Array<{
     question: string;
     options: Array<{ type: string; value: string }>;
-    correctOption: number;
-    explanation: string;
+    correctOption: number | null; // Allow null for polls without a correct answer
+    explanation: string | null; // Allow null for no explanation
     questionImage?: string;
     from: { id: number };
   }>;
-  expectingImageForQuestionNumber?: number; // Track which question is awaiting an image or poll
+  expectingImageOrPollForQuestionNumber?: number; // Track which question is awaiting an image or poll
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
 }
 
@@ -275,7 +275,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
     chapter,
     count,
     questions: [],
-    expectingImageForQuestionNumber: undefined,
+    expectingImageOrPollForQuestionNumber: undefined,
     awaitingChapterSelection: true,
   };
 
@@ -371,7 +371,7 @@ bot.on('message', async (ctx) => {
 
     await ctx.reply(
       `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
-      `Please send an image for question 1 (optional) or send the quiz poll directly to proceed without an image. ` +
+      `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
       `You can also reply "skip" to explicitly skip the image.`,
       { parse_mode: 'Markdown' }
     );
@@ -395,23 +395,23 @@ bot.on('message', async (ctx) => {
         submission.questions.push({
           question: '',
           options: [],
-          correctOption: 0,
-          explanation: '',
+          correctOption: null,
+          explanation: null,
           questionImage: downloadUrl,
           from: { id: ctx.from?.id },
         });
 
         await ctx.reply(
-          `Image for question ${questionNumber} saved. Please send the quiz poll for question ${questionNumber} ` +
-          `with the question, 4 options, a correct answer, and an explanation.`,
+          `Image for question ${questionNumber} saved. Please send the poll for question ${questionNumber} ` +
+          `with the question and options.`,
           { parse_mode: 'Markdown' }
         );
       } else {
-        await ctx.reply('❌ Failed to upload image. Please try again or send the quiz poll to proceed without an image.');
+        await ctx.reply('❌ Failed to upload image. Please try again or send the poll to proceed without an image.');
       }
     } catch (error) {
       console.error('Image upload error:', error);
-      await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or send the quiz poll to proceed without an image.');
+      await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or send the poll to proceed without an image.');
     }
     return;
   }
@@ -425,51 +425,34 @@ bot.on('message', async (ctx) => {
     submission.questions.push({
       question: '',
       options: [],
-      correctOption: 0,
-      explanation: '',
+      correctOption: null,
+      explanation: null,
       questionImage: null,
       from: { id: ctx.from?.id },
     });
 
     await ctx.reply(
-      `No image for question ${questionNumber}. Please send the quiz poll for question ${questionNumber} ` +
-      `with the question, 4 options, a correct answer, and an explanation.`,
+      `No image for question ${questionNumber}. Please send the poll for question ${questionNumber} ` +
+      `with the question and options.`,
       { parse_mode: 'Markdown' }
     );
     return;
   }
 
-  // Handle quiz poll submissions from admin
+  // Handle poll submissions from admin (all types, with or without explanation, any number of options)
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.questions.length + 1; // Next question number
 
     const poll = msg.poll;
 
-    if (poll.type !== 'quiz') {
-      await ctx.reply('Please send a quiz poll with a correct answer and explanation.');
-      return;
-    }
-
-    if (poll.options.length !== 4) {
-      await ctx.reply('Quiz polls must have exactly 4 options.');
-      return;
-    }
-
-    if (!poll.explanation) {
-      await ctx.reply('Quiz polls must include an explanation.');
-      return;
-    }
-
-    const correctOptionIndex = poll.correct_option_id;
-
     // If expecting an image/poll and no image was provided, create a question with no image
     if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
       submission.questions.push({
         question: poll.question,
         options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })),
-        correctOption: correctOptionIndex,
-        explanation: poll.explanation,
+        correctOption: poll.type === 'quiz' ? poll.correct_option_id : null,
+        explanation: poll.explanation || null,
         questionImage: null,
         from: { id: ctx.from?.id },
       });
@@ -478,8 +461,8 @@ bot.on('message', async (ctx) => {
       const lastQuestion = submission.questions[questionNumber - 2];
       lastQuestion.question = poll.question;
       lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
-      lastQuestion.correctOption = correctOptionIndex;
-      lastQuestion.explanation = poll.explanation;
+      lastQuestion.correctOption = poll.type === 'quiz' ? poll.correct_option_id : null;
+      lastQuestion.explanation = poll.explanation || null;
     } else {
       await ctx.reply('Please send an image, reply "skip", or ensure the previous question is completed before sending a poll.');
       return;
@@ -489,7 +472,7 @@ bot.on('message', async (ctx) => {
       submission.expectingImageOrPollForQuestionNumber = submission.questions.length + 1;
       await ctx.reply(
         `Question ${questionNumber} saved. Please send an image for question ${submission.questions.length + 1} (optional) ` +
-        `or send the quiz poll directly to proceed without an image. You can also reply "skip" to explicitly skip the image.`,
+        `or send the poll directly to proceed without an image. You can also reply "skip" to explicitly skip the image.`,
         { parse_mode: 'Markdown' }
       );
     } else {
