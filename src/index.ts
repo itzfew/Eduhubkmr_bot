@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc } from './utils/firebase'; // Updated imports for Firestore
+import { db, collection, addDoc, storage, uploadImageFromUrl } from './utils/firebase'; // Updated imports
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -33,11 +33,11 @@ interface PendingQuestion {
   count: number;
   questions: Array<{
     question: string;
-    options: { [key: string]: string };
-    correct_option: string;
+    options: Array<{ type: string; value: string }>;
+    correctOption: number;
     explanation: string;
-    image?: string;
-    from?: { id: number }; // Added to store Telegram user ID
+    questionImage?: string;
+    from: { id: number };
   }>;
   expectingImageFor?: string; // Track poll ID awaiting an image
   awaitingChapterSelection?: boolean; // Track if waiting for chapter number
@@ -108,6 +108,11 @@ async function fetchChapters(subject: string): Promise<string[]> {
   }
 }
 
+// Generate unique question ID
+function generateQuestionId(): string {
+  return 'q_' + Math.random().toString(36).substr(2, 9);
+}
+
 // --- COMMANDS ---
 bot.command('about', about());
 bot.command('help', help());
@@ -123,7 +128,7 @@ bot.command('neetcountdown', pin());
 bot.command('stopcountdown', stopCountdown());
 bot.command('countdown', logoCommand());
 
-// New command to show user count from Google Sheets
+// Show user count from Google Sheets
 bot.command('users', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
@@ -367,7 +372,7 @@ bot.on('message', async (ctx) => {
       `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
       `Please share ${submission.count} questions as Telegram quiz polls. ` +
       `Each poll should have the question, 4 options, a correct answer, and an explanation. ` +
-      `After sending a poll, you can optionally send an image URL for it.`,
+      `After sending a poll, you can optionally send an image URL for the question (or reply "skip").`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -394,22 +399,14 @@ bot.on('message', async (ctx) => {
     }
 
     const correctOptionIndex = poll.correct_option_id;
-    const correctOptionLetter = ['A', 'B', 'C', 'D'][correctOptionIndex];
 
     const question = {
-      subject: submission.subject,
-      chapter: submission.chapter,
       question: poll.question,
-      options: {
-        A: poll.options[0].text,
-        B: poll.options[1].text,
-        C: poll.options[2].text,
-        D: poll.options[3].text,
-      },
-      correct_option: correctOptionLetter,
+      options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })), // Text-based options
+      correctOption: correctOptionIndex,
       explanation: poll.explanation,
-      image: '',
-      from: { id: ctx.from?.id }, // Added to satisfy security rules
+      questionImage: null, // Will be set if image URL is provided
+      from: { id: ctx.from?.id },
     };
 
     submission.questions.push(question);
@@ -425,7 +422,20 @@ bot.on('message', async (ctx) => {
       try {
         const questionsCollection = collection(db, 'questions');
         for (const q of submission.questions) {
-          await addDoc(questionsCollection, q);
+          const questionId = generateQuestionId();
+          const questionData = {
+            subject: submission.subject,
+            chapter: submission.chapter,
+            question: q.question,
+            questionImage: q.questionImage || null,
+            options: q.options,
+            correctOption: q.correctOption,
+            explanation: q.explanation,
+            createdAt: new Date().toISOString(), // Client-side timestamp
+            createdBy: ctx.from?.id.toString(), // Use Telegram ID as createdBy
+            from: q.from,
+          };
+          await addDoc(questionsCollection, questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
@@ -447,16 +457,28 @@ bot.on('message', async (ctx) => {
     const lastQuestion = submission.questions[submission.questions.length - 1];
 
     if (msg.text.toLowerCase() === 'skip') {
-      lastQuestion.image = '';
+      lastQuestion.questionImage = null;
       submission.expectingImageFor = undefined;
       if (submission.questions.length < submission.count) {
         await ctx.reply(`Image skipped. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
       }
     } else if (msg.text.startsWith('http') && msg.text.match(/\.(jpg|jpeg|png|gif)$/i)) {
-      lastQuestion.image = msg.text;
-      submission.expectingImageFor = undefined;
-      if (submission.questions.length < submission.count) {
-        await ctx.reply(`Image saved. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
+      try {
+        const questionId = generateQuestionId(); // Generate ID early for storage path
+        const imagePath = `questions/${questionId}/question.jpg`;
+        const downloadUrl = await uploadImageFromUrl(msg.text, imagePath);
+        if (downloadUrl) {
+          lastQuestion.questionImage = downloadUrl;
+          submission.expectingImageFor = undefined;
+          if (submission.questions.length < submission.count) {
+            await ctx.reply(`Image saved. Please send the next question (${submission.questions.length + 1}/${submission.count}) as a quiz poll.`);
+          }
+        } else {
+          await ctx.reply('❌ Failed to upload image. Please try again or reply "skip".');
+        }
+      } catch (error) {
+        console.error('Image upload error:', error);
+        await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or reply "skip".');
       }
     } else {
       await ctx.reply('Please send a valid image URL (jpg, jpeg, png, or gif) or reply "skip" to proceed without an image.');
