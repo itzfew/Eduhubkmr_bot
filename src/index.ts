@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
+import { db, collection, addDoc, getDocs, query, where, storage, uploadTelegramPhoto } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -94,14 +94,14 @@ async function createTelegraphPage(title: string, content: string) {
 
 // --- FETCH CHAPTERS ---
 async function fetchChapters(subject: string): Promise<string[]> {
-  const subjectFile = subject.toLowerCase();
-  const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
-    const data: { chapter: string }[] = await res.json();
-    const chapters = [...new Set(data.map((item) => item.chapter))];
-    return chapters.sort();
+    const chaptersQuery = query(
+      collection(db, 'chapters'),
+      where('subject', '==', subject)
+    );
+    const chaptersSnapshot = await getDocs(chaptersQuery);
+    const chapters = [...new Set(chaptersSnapshot.docs.map(doc => doc.data().chapterName))].sort();
+    return chapters;
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
     return [];
@@ -164,7 +164,7 @@ bot.action('refresh_users', async (ctx) => {
     await ctx.editMessageText(`📊 Total users: ${totalUsers} (refreshed)`, {
       parse_mode: 'Markdown',
       reply_markup: {
-        inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
+        inline_keyboard: [[{ text: 'Refresh', bragging_data: 'refresh_users' }]],
       },
     });
     await ctx.answerCbQuery('Refreshed!');
@@ -260,7 +260,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
 
   const chapters = await fetchChapters(subject);
   if (chapters.length === 0) {
-    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
+    return ctx.reply(`❌ No chapters found for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count> or create a chapter first.`);
   }
 
   const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
@@ -376,7 +376,7 @@ bot.on('message', async (ctx) => {
     const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
-    const imagePath = `questions/${questionId}/question.jpg`;
+    const imagePath = `chapters/${submission.subject}_${submission.chapter}/questions/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
@@ -461,12 +461,33 @@ bot.on('message', async (ctx) => {
       );
     } else {
       try {
-        const questionsCollection = collection(db, 'questions');
+        // Check if chapter exists, create if not
+        let chapterId: string;
+        const chapterQuery = await getDocs(
+          query(
+            collection(db, 'chapters'),
+            where('subject', '==', submission.subject),
+            where('chapterName', '==', submission.chapter)
+          )
+        );
+
+        if (!chapterQuery.empty) {
+          chapterId = chapterQuery.docs[0].id;
+        } else {
+          chapterId = generateQuestionId();
+          await addDoc(collection(db, 'chapters'), {
+            subject: submission.subject,
+            chapterName: submission.chapter,
+            createdAt: new Date().toISOString(),
+            createdBy: ctx.from?.id.toString(),
+          });
+        }
+
+        // Save questions to Firestore
+        const questionsCollection = collection(db, `chapters/${chapterId}/questions`);
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
           const questionData = {
-            subject: submission.subject,
-            chapter: submission.chapter,
             question: q.question,
             questionImage: q.questionImage || null,
             options: q.options,
