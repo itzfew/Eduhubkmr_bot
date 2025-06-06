@@ -1,5 +1,14 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  setDoc,
+  doc,
+  getDocs,
+  query,
+  where
+} from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { getDatabase, ref as dbRef, set, onValue, remove, off } from 'firebase/database';
@@ -74,6 +83,11 @@ export {
   db,
   collection,
   addDoc,
+  setDoc,
+  doc,
+  getDocs,
+  query,
+  where,
   storage,
   uploadImageFromUrl,
   uploadTelegramPhoto,
