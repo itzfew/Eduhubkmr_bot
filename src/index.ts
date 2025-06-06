@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, setDoc, doc, getDocs, query, where, storage, uploadTelegramPhoto, auth, currentUser, ensureAuth } from './utils/firebase';
+import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -40,7 +40,7 @@ interface PendingQuestion {
     from: { id: number };
   }>;
   expectingImageOrPollForQuestionNumber?: number;
-  awaitingChapterConfirmation?: boolean;
+  awaitingChapterSelection?: boolean;
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
@@ -94,23 +94,16 @@ async function createTelegraphPage(title: string, content: string) {
 
 // --- FETCH CHAPTERS ---
 async function fetchChapters(subject: string): Promise<string[]> {
+  const subjectFile = subject.toLowerCase();
+  const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
   try {
-    await ensureAuth();
-    console.log(`Fetching chapters for subject: ${subject}`);
-    const chaptersQuery = query(
-      collection(db, 'chapters'),
-      where('subject', '==', subject)
-    );
-    console.log('Executing Firestore query');
-    const chaptersSnapshot = await getDocs(chaptersQuery);
-    const chapters = [...new Set(chaptersSnapshot.docs.map(doc => doc.data().chapterName))].sort();
-    console.log(`Retrieved chapters: ${chapters}`);
-    return chapters;
-  } catch (error: any) {
-    console.error(`Error fetching chapters for ${subject}:`, {
-      message: error.message,
-      stack: error.stack
-    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
+    const data: { chapter: string }[] = await res.json();
+    const chapters = [...new Set(data.map((item) => item.chapter))];
+    return chapters.sort();
+  } catch (error) {
+    console.error(`Error fetching chapters for ${subject}:`, error);
     return [];
   }
 }
@@ -240,27 +233,10 @@ bot.command('reply', async (ctx) => {
   }
 });
 
-// Debug authentication status
-bot.command('debugauth', async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) return;
-  try {
-    await ensureAuth();
-    await ctx.reply(`Current user: ${currentUser ? currentUser.uid : 'Not authenticated'}`);
-  } catch (error: any) {
-    await ctx.reply(`Authentication error: ${error.message}`);
-  }
-});
-
-// Handle /addsubject00chapter0name commands
-bot.command(/add[A-Za-z]+00[A-Za-z0-9_]+/, async (ctx) => {
+// Handle /add<subject> or /add<Subject>__<Chapter> commands
+bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
-  }
-
-  try {
-    await ensureAuth();
-  } catch (error: any) {
-    return ctx.reply(`❌ Error: Bot is not authenticated: ${error.message}`);
   }
 
   const command = ctx.message.text?.split(' ')[0].substring(1);
@@ -268,56 +244,41 @@ bot.command(/add[A-Za-z]+00[A-Za-z0-9_]+/, async (ctx) => {
   const count = parseInt(countStr, 10);
 
   if (!countStr || isNaN(count) || count <= 0) {
-    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology00Cell0Structure 10');
+    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
   }
 
-  const [subjectRaw, chapterRaw] = command.split('00');
-  const subject = subjectRaw.replace('add', '').replace(/0/g, ' ');
-  const chapter = chapterRaw.replace(/0/g, ' ');
+  let subject = '';
+  let chapter = 'Random';
 
-  // Verify if chapter exists, create if not
-  let chapterId: string | null = null;
-  try {
-    const chapterQuery = query(
-      collection(db, 'chapters'),
-      where('subject', '==', subject),
-      where('chapterName', '==', chapter)
-    );
-    const chapterSnapshot = await getDocs(chapterQuery);
-    if (!chapterSnapshot.empty) {
-      chapterId = chapterSnapshot.docs[0].id;
-    } else {
-      chapterId = generateQuestionId();
-      await setDoc(doc(db, 'chapters', chapterId), {
-        subject,
-        chapterName: chapter,
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser!.uid,
-      });
-    }
-  } catch (error: any) {
-    console.error('Error checking or creating chapter:', {
-      message: error.message,
-      stack: error.stack
-    });
-    return ctx.reply(`❌ Error: Unable to verify or create chapter in Firestore: ${error.message}`);
+  if (command.includes('__')) {
+    const [subj, chp] = command.split('__');
+    subject = subj.replace('add', '').replace(/_/g, ' ');
+    chapter = chp.replace(/_/g, ' ');
+  } else {
+    subject = command.replace('add', '').replace(/_/g, ' ');
   }
+
+  const chapters = await fetchChapters(subject);
+  if (chapters.length === 0) {
+    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
+  }
+
+  const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
+  const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
+  const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
 
   pendingSubmissions[ctx.from.id] = {
     subject,
     chapter,
     count,
     questions: [],
-    expectingImageOrPollForQuestionNumber: 1,
-    awaitingChapterConfirmation: false,
+    expectingImageOrPollForQuestionNumber: undefined,
+    awaitingChapterSelection: true,
   };
 
-  await ctx.reply(
-    `Preparing to add ${count} question(s) for *${subject}* (Chapter: *${chapter}*). ` +
-    `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
-    `You can also reply "skip" to explicitly skip the image.`,
-    { parse_mode: 'Markdown' }
-  );
+  const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
+                    (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
+  await ctx.reply(replyText, { parse_mode: 'Markdown' });
 });
 
 // User greeting and message handling
@@ -385,50 +346,37 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
-    try {
-      await ensureAuth();
-    } catch (error: any) {
-      await ctx.reply(`❌ Error: Bot is not authenticated: ${error.message}`);
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
+    const submission = pendingSubmissions[chat.id];
+    const chapterNumber = parseInt(msg.text.trim(), 10);
+
+    const chapters = await fetchChapters(submission.subject);
+    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > chapters.length) {
+      await ctx.reply(`Please enter a valid chapter number between 1 and ${chapters.length}.`);
       return;
     }
 
+    submission.chapter = chapters[chapterNumber - 1];
+    submission.awaitingChapterSelection = false;
+    submission.expectingImageOrPollForQuestionNumber = 1;
+
+    await ctx.reply(
+      `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
+      `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
+      `You can also reply "skip" to explicitly skip the image.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
-
-    // Get chapterId
-    let chapterId: string | null = null;
-    try {
-      const chapterQuery = query(
-        collection(db, 'chapters'),
-        where('subject', '==', submission.subject),
-        where('chapterName', '==', submission.chapter)
-      );
-      const chapterSnapshot = await getDocs(chapterQuery);
-      if (!chapterSnapshot.empty) {
-        chapterId = chapterSnapshot.docs[0].id;
-      } else {
-        chapterId = generateQuestionId();
-        await setDoc(doc(db, 'chapters', chapterId), {
-          subject: submission.subject,
-          chapterName: submission.chapter,
-          createdAt: new Date().toISOString(),
-          createdBy: currentUser!.uid,
-        });
-      }
-    } catch (error: any) {
-      console.error('Error checking or creating chapter for image upload:', {
-        message: error.message,
-        stack: error.stack
-      });
-      await ctx.reply(`❌ Error: Unable to verify or create chapter in Firestore: ${error.message}`);
-      return;
-    }
 
     const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
-    const imagePath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
+    const imagePath = `questions/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
@@ -450,12 +398,9 @@ bot.on('message', async (ctx) => {
       } else {
         await ctx.reply('❌ Failed to upload image. Please try again or send the poll to proceed without an image.');
       }
-    } catch (error: any) {
-      console.error('Image upload error:', {
-        message: error.message,
-        stack: error.stack
-      });
-      await ctx.reply(`❌ Error uploading image to Firebase Storage: ${error.message}`);
+    } catch (error) {
+      console.error('Image upload error:', error);
+      await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or send the poll to proceed without an image.');
     }
     return;
   }
@@ -482,45 +427,10 @@ bot.on('message', async (ctx) => {
   }
 
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
-    try {
-      await ensureAuth();
-    } catch (error: any) {
-      await ctx.reply(`❌ Error: Bot is not authenticated: ${error.message}`);
-      return;
-    }
-
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.questions.length + 1;
 
     const poll = msg.poll;
-
-    let chapterId: string | null = null;
-    try {
-      const chapterQuery = query(
-        collection(db, 'chapters'),
-        where('subject', '==', submission.subject),
-        where('chapterName', '==', submission.chapter)
-      );
-      const chapterSnapshot = await getDocs(chapterQuery);
-      if (!chapterSnapshot.empty) {
-        chapterId = chapterSnapshot.docs[0].id;
-      } else {
-        chapterId = generateQuestionId();
-        await setDoc(doc(db, 'chapters', chapterId), {
-          subject: submission.subject,
-          chapterName: submission.chapter,
-          createdAt: new Date().toISOString(),
-          createdBy: currentUser!.uid,
-        });
-      }
-    } catch (error: any) {
-      console.error('Error checking or creating chapter:', {
-        message: error.message,
-        stack: error.stack
-      });
-      await ctx.reply(`❌ Error: Unable to verify or create chapter in Firestore: ${error.message}`);
-      return;
-    }
 
     if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
       submission.questions.push({
@@ -551,28 +461,32 @@ bot.on('message', async (ctx) => {
       );
     } else {
       try {
+        const questionsCollection = collection(db, 'questions');
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
           const questionData = {
+            subject: submission.subject,
+            chapter: submission.chapter,
             question: q.question,
             questionImage: q.questionImage || null,
             options: q.options,
             correctOption: q.correctOption,
             explanation: q.explanation,
             createdAt: new Date().toISOString(),
-            createdBy: currentUser!.uid,
+            createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
-          await addDoc(collection(db, 'chapters', chapterId, 'questions'), questionData);
+          await addDoc(questionsCollection, questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
       } catch (error: any) {
-        console.error('Failed to save questions to Firestore:', {
-          message: error.message,
-          stack: error.stack
-        });
-        await ctx.reply(`❌ Error: Unable to save questions to Firestore: ${error.message}`);
+        console.error('Failed to save questions to Firestore:', error);
+        if (error.code === 'permission-denied') {
+          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase configuration.');
+        } else {
+          await ctx.reply('❌ Error: Unable to save questions to Firestore.');
+        }
       }
     }
     return;
