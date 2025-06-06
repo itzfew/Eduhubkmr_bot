@@ -17,12 +17,43 @@ import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './commands/pin';
 import { logoCommand } from './commands/logo';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth'; // Import Firebase Authentication
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
 const ADMIN_ID = 6930703214;
 let accessToken: string | null = null;
 
+// Firebase configuration (from the provided HTML)
+const firebaseConfig = {
+  apiKey: "AIzaSyDIWtVfoGIWQoRVe36v6g6S3slTRRYUAgk",
+  authDomain: "quizes-3028d.firebaseapp.com",
+  databaseURL: "https://quizes-3028d-default-rtdb.firebaseio.com",
+  projectId: "quizes-3028d",
+  storageBucket: "quizes-3028d.appspot.com",
+  messagingSenderId: "624591251031",
+  appId: "1:624591251031:web:e093472f24fdeb29fc2512",
+  measurementId: "G-QMZK5Y6769"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+// Anonymous Authentication
+async function initializeAnonymousAuth() {
+  try {
+    const userCredential = await auth.signInAnonymously();
+    console.log('Anonymous authentication successful, UID:', userCredential.user?.uid);
+    return userCredential.user?.uid;
+  } catch (error) {
+    console.error('Anonymous authentication failed:', error);
+    throw new Error('Failed to authenticate anonymously with Firebase');
+  }
+}
+
+// Initialize bot and authenticate
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
 
@@ -110,187 +141,9 @@ async function fetchChapters(subject: string): Promise<string[]> {
 
 // Generate unique question ID
 function generateQuestionId(): string {
-  return 'q_' + Math.random().toString(36).substr(2, 9);
+  return 'id_' + Math.random().toString(36).substr(2, 9); // Match HTML's generateId
 }
 
-// --- COMMANDS ---
-bot.command('about', about());
-bot.command('help', help());
-bot.command('study', study());
-bot.command('neet', neet());
-bot.command('jee', jee());
-bot.command('groups', groups());
-bot.command('me', me());
-bot.command('info', info());
-bot.command('quote', quote());
-bot.command('quiz', playquiz());
-bot.command('neetcountdown', pin());
-bot.command('stopcountdown', stopCountdown());
-bot.command('countdown', logoCommand());
-
-// Show user count from Google Sheets
-bot.command('users', async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) {
-    return ctx.reply('You are not authorized to use this command.');
-  }
-
-  try {
-    const chatIds = await fetchChatIdsFromSheet();
-    const totalUsers = chatIds.length;
-
-    await ctx.reply(`📊 Total users: ${totalUsers}`, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
-      },
-    });
-  } catch (err) {
-    console.error('Failed to fetch user count:', err);
-    await ctx.reply('❌ Error: Unable to fetch user count from Google Sheet.');
-  }
-});
-
-// Handle refresh button for user count
-bot.action('refresh_users', async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) {
-    await ctx.answerCbQuery('Unauthorized');
-    return;
-  }
-
-  try {
-    const chatIds = await fetchChatIdsFromSheet();
-    const totalUsers = chatIds.length;
-
-    await ctx.editMessageText(`📊 Total users: ${totalUsers} (refreshed)`, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
-      },
-    });
-    await ctx.answerCbQuery('Refreshed!');
-  } catch (err) {
-    console.error('Failed to refresh user count:', err);
-    await ctx.answerCbQuery('Refresh failed');
-  }
-});
-
-// Broadcast to all saved chat IDs
-bot.command('broadcast', async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
-
-  const msg = ctx.message.text?.split(' ').slice(1).join(' ');
-  if (!msg) return ctx.reply('Usage:\n/broadcast Your message here');
-
-  let chatIds: number[] = [];
-
-  try {
-    chatIds = await fetchChatIdsFromSheet();
-  } catch (err) {
-    console.error('Failed to fetch chat IDs:', err);
-    return ctx.reply('❌ Error: Unable to fetch chat IDs from Google Sheet.');
-  }
-
-  if (chatIds.length === 0) {
-    return ctx.reply('No users to broadcast to.');
-  }
-
-  let success = 0;
-  for (const id of chatIds) {
-    try {
-      await ctx.telegram.sendMessage(id, msg);
-      success++;
-    } catch (err) {
-      console.log(`Failed to send to ${id}`, err);
-    }
-  }
-
-  await ctx.reply(`✅ Broadcast sent to ${success} users.`);
-});
-
-// Admin reply to user via command
-bot.command('reply', async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) return ctx.reply('You are not authorized to use this command.');
-
-  const parts = ctx.message.text?.split(' ');
-  if (!parts || parts.length < 3) {
-    return ctx.reply('Usage:\n/reply <chat_id> <message>');
-  }
-
-  const chatIdStr = parts[1].trim();
-  const chatId = Number(chatIdStr);
-  const message = parts.slice(2).join(' ');
-
-  if (isNaN(chatId)) {
-    return ctx.reply(`Invalid chat ID: ${chatIdStr}`);
-  }
-
-  try {
-    await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}`, { parse_mode: 'Markdown' });
-    await ctx.reply(`Reply sent to ${chatId}`, { parse_mode: 'Markdown' });
-  } catch (error) {
-    console.error('Reply error:', error);
-    await ctx.reply(`Failed to send reply to ${chatId}`, { parse_mode: 'Markdown' });
-  }
-});
-
-// Handle /add<subject> or /add<Subject>__<Chapter> commands
-bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) {
-    return ctx.reply('You are not authorized to use this command.');
-  }
-
-  const command = ctx.message.text?.split(' ')[0].substring(1);
-  const countStr = ctx.message.text?.split(' ')[1];
-  const count = parseInt(countStr, 10);
-
-  if (!countStr || isNaN(count) || count <= 0) {
-    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
-  }
-
-  let subject = '';
-  let chapter = 'Random';
-
-  if (command.includes('__')) {
-    const [subj, chp] = command.split('__');
-    subject = subj.replace('add', '').replace(/_/g, ' ');
-    chapter = chp.replace(/_/g, ' ');
-  } else {
-    subject = command.replace('add', '').replace(/_/g, ' ');
-  }
-
-  const chapters = await fetchChapters(subject);
-  if (chapters.length === 0) {
-    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
-  }
-
-  const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
-  const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
-  const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
-
-  pendingSubmissions[ctx.from.id] = {
-    subject,
-    chapter,
-    count,
-    questions: [],
-    expectingImageOrPollForQuestionNumber: undefined,
-    awaitingChapterSelection: true,
-  };
-
-  const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
-                    (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
-  await ctx.reply(replyText, { parse_mode: 'Markdown' });
-});
-
-// User greeting and message handling
-bot.start(async (ctx) => {
-  if (isPrivateChat(ctx.chat.type)) {
-    await ctx.reply('Welcome! Use /help to explore commands.');
-    await greeting()(ctx);
-  }
-});
-
-// Handle button clicks (quiz)
-bot.on('callback_query', handleQuizActions());
 // --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
@@ -371,11 +224,12 @@ bot.on('message', async (ctx) => {
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
+    const questionId = generateQuestionId();
+    const chapterId = generateQuestionId(); // Temporary, will be updated later
+    const imagePath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
 
     const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
-    const questionId = generateQuestionId();
-    const imagePath = `questions/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
@@ -428,7 +282,6 @@ bot.on('message', async (ctx) => {
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.questions.length + 1;
-
     const poll = msg.poll;
 
     if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
@@ -460,6 +313,9 @@ bot.on('message', async (ctx) => {
       );
     } else {
       try {
+        // Ensure anonymous authentication
+        const userId = await initializeAnonymousAuth();
+
         // Check if chapter exists or create a new one
         let chapterId;
         const chapterQuery = await db.collection('chapters')
@@ -470,12 +326,13 @@ bot.on('message', async (ctx) => {
         if (!chapterQuery.empty) {
           chapterId = chapterQuery.docs[0].id;
         } else {
-          chapterId = generateQuestionId(); // Reuse your ID generation function
+          chapterId = generateQuestionId();
           await db.collection('chapters').doc(chapterId).set({
             subject: submission.subject,
             chapterName: submission.chapter,
-            createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: userId,
+            telegramId: ctx.from?.id.toString(), // Store Telegram ID for security
           });
         }
 
@@ -483,15 +340,32 @@ bot.on('message', async (ctx) => {
         const questionsCollection = db.collection('chapters').doc(chapterId).collection('questions');
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
+          // Update image path to match chapterId
+          let questionImageUrl = q.questionImage;
+          if (questionImageUrl) {
+            const oldPath = questionImageUrl.split('/o/')[1].split('?')[0];
+            const newPath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
+            // Move image to correct path in Firebase Storage
+            const oldRef = storage.ref(oldPath);
+            const newRef = storage.ref(newPath);
+            const file = await oldRef.getDownloadURL();
+            const response = await fetch(file);
+            const blob = await response.blob();
+            await newRef.put(blob);
+            questionImageUrl = await newRef.getDownloadURL();
+            await oldRef.delete().catch(() => {}); // Delete old image
+          }
+
           const questionData = {
             question: q.question,
-            questionImage: q.questionImage || null,
+            questionImage: questionImageUrl || null,
             options: q.options,
             correctOption: q.correctOption,
             explanation: q.explanation || null,
-            explanationImage: null, // Add support for explanation images if needed
-            createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
+            explanationImage: null, // Add support if needed
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: userId,
+            telegramId: ctx.from?.id.toString(), // Store Telegram ID
           };
           await questionsCollection.doc(questionId).set(questionData);
         }
