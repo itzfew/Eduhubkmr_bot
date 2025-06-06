@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
+import { db, collection, addDoc, setDoc, doc, getDocs, query, where, storage, uploadTelegramPhoto } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -17,7 +17,6 @@ import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './commands/pin';
 import { logoCommand } from './commands/logo';
-import { getDocs, query, where, collection as firestoreCollection } from 'firebase/firestore';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
@@ -41,7 +40,7 @@ interface PendingQuestion {
     from: { id: number };
   }>;
   expectingImageOrPollForQuestionNumber?: number;
-  awaitingChapterSelection?: boolean;
+  awaitingChapterConfirmation?: boolean;
 }
 
 const pendingSubmissions: { [key: number]: PendingQuestion } = {};
@@ -234,8 +233,8 @@ bot.command('reply', async (ctx) => {
   }
 });
 
-// Handle /add<subject> or /add<Subject>__<Chapter> commands
-bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
+// Handle /addsubject00chapter0name commands
+bot.command(/add[A-Za-z]+00[A-Za-z0-9_]+/, async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
     return ctx.reply('You are not authorized to use this command.');
   }
@@ -245,41 +244,53 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
   const count = parseInt(countStr, 10);
 
   if (!countStr || isNaN(count) || count <= 0) {
-    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
+    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology00Cell0Structure 10');
   }
 
-  let subject = '';
-  let chapter = 'Random';
+  const [subjectRaw, chapterRaw] = command.split('00');
+  const subject = subjectRaw.replace('add', '').replace(/0/g, ' ');
+  const chapter = chapterRaw.replace(/0/g, ' ');
 
-  if (command.includes('__')) {
-    const [subj, chp] = command.split('__');
-    subject = subj.replace('add', '').replace(/_/g, ' ');
-    chapter = chp.replace(/_/g, ' ');
-  } else {
-    subject = command.replace('add', '').replace(/_/g, ' ');
+  // Verify if chapter exists, create if not
+  let chapterId: string | null = null;
+  try {
+    const chapterQuery = query(
+      collection(db, 'chapters'),
+      where('subject', '==', subject),
+      where('chapterName', '==', chapter)
+    );
+    const chapterSnapshot = await getDocs(chapterQuery);
+    if (!chapterSnapshot.empty) {
+      chapterId = chapterSnapshot.docs[0].id;
+    } else {
+      chapterId = generateQuestionId();
+      await setDoc(doc(db, 'chapters', chapterId), {
+        subject,
+        chapterName: chapter,
+        createdAt: new Date().toISOString(),
+        createdBy: ctx.from?.id.toString(),
+      });
+    }
+  } catch (error) {
+    console.error('Error checking or creating chapter:', error);
+    return ctx.reply('❌ Error: Unable to verify or create chapter in Firestore.');
   }
-
-  const chapters = await fetchChapters(subject);
-  if (chapters.length === 0) {
-    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
-  }
-
-  const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
-  const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
-  const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
 
   pendingSubmissions[ctx.from.id] = {
     subject,
     chapter,
     count,
     questions: [],
-    expectingImageOrPollForQuestionNumber: undefined,
-    awaitingChapterSelection: true,
+    expectingImageOrPollForQuestionNumber: 1,
+    awaitingChapterConfirmation: false,
   };
 
-  const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
-                    (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
-  await ctx.reply(replyText, { parse_mode: 'Markdown' });
+  await ctx.reply(
+    `Preparing to add ${count} question(s) for *${subject}* (Chapter: *${chapter}*). ` +
+    `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
+    `You can also reply "skip" to explicitly skip the image.`,
+    { parse_mode: 'Markdown' }
+  );
 });
 
 // User greeting and message handling
@@ -347,29 +358,6 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
-    const submission = pendingSubmissions[chat.id];
-    const chapterNumber = parseInt(msg.text.trim(), 10);
-
-    const chapters = await fetchChapters(submission.subject);
-    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > chapters.length) {
-      await ctx.reply(`Please enter a valid chapter number between 1 and ${chapters.length}.`);
-      return;
-    }
-
-    submission.chapter = chapters[chapterNumber - 1];
-    submission.awaitingChapterSelection = false;
-    submission.expectingImageOrPollForQuestionNumber = 1;
-
-    await ctx.reply(
-      `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
-      `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
-      `You can also reply "skip" to explicitly skip the image.`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
@@ -377,7 +365,7 @@ bot.on('message', async (ctx) => {
     const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
-    const imagePath = `chapters/${submission.subject}/${submission.chapter}/questions/${questionId}/question.jpg`;
+    const imagePath = `chapters/${submission.chapter}/${questions}/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
@@ -433,7 +421,32 @@ bot.on('message', async (ctx) => {
 
     const poll = msg.poll;
 
-    if (submission.expectingImageaskedForQuestionNumber === questionNumber) {
+    let chapterId: string | null = null;
+    try {
+      const chapterQuery = query(
+        collection(db, 'chapters'),
+        where('subject', '==', submission.subject),
+        where('chapterName', '==', submission.chapter)
+      );
+      const chapterSnapshot = await getDocs(chapterQuery);
+      if (!chapterSnapshot.empty) {
+        chapterId = chapterSnapshot.docs[0].id;
+      } else {
+        chapterId = generateQuestionId();
+        await setDoc(doc(db, 'chapters', chapterId), {
+          subject: submission.subject,
+          chapterName: submission.chapter,
+          createdAt: new Date().toISOString(),
+          createdBy: ctx.from?.id.toString(),
+        });
+      }
+    } catch (error) {
+      console.error('Error checking or creating chapter:', error);
+      await ctx.reply('❌ Error: Unable to verify or create chapter in Firestore.');
+      return;
+    }
+
+    if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
       submission.questions.push({
         question: poll.question,
         options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })),
@@ -462,27 +475,6 @@ bot.on('message', async (ctx) => {
       );
     } else {
       try {
-        // Check if chapter exists, create if not
-        let chapterId: string | null = null;
-        const chapterQuery = query(
-          collection(db, 'chapters'),
-          where('subject', '==', submission.subject),
-          where('chapterName', '==', submission.chapter)
-        );
-        const chapterSnapshot = await getDocs(chapterQuery);
-        if (!chapterSnapshot.empty) {
-          chapterId = chapterSnapshot.docs[0].id;
-        } else {
-          chapterId = generateQuestionId();
-          await addDoc(collection(db, 'chapters'), {
-            subject: submission.subject,
-            chapterName: submission.chapter,
-            createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
-          });
-        }
-
-        // Save questions to Firestore under chapters/{chapterId}/questions
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
           const questionData = {
@@ -495,7 +487,7 @@ bot.on('message', async (ctx) => {
             createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
-          await addDoc(collection(db, `chapters/${chapterId}/questions`), questionData);
+          await addDoc(collection(db, 'chapters', chapterId, 'questions'), questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
