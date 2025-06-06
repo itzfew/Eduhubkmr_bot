@@ -291,7 +291,6 @@ bot.start(async (ctx) => {
 
 // Handle button clicks (quiz)
 bot.on('callback_query', handleQuizActions());
-
 // --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
@@ -461,22 +460,40 @@ bot.on('message', async (ctx) => {
       );
     } else {
       try {
-        const questionsCollection = collection(db, 'questions');
+        // Check if chapter exists or create a new one
+        let chapterId;
+        const chapterQuery = await db.collection('chapters')
+          .where('subject', '==', submission.subject)
+          .where('chapterName', '==', submission.chapter)
+          .get();
+
+        if (!chapterQuery.empty) {
+          chapterId = chapterQuery.docs[0].id;
+        } else {
+          chapterId = generateQuestionId(); // Reuse your ID generation function
+          await db.collection('chapters').doc(chapterId).set({
+            subject: submission.subject,
+            chapterName: submission.chapter,
+            createdAt: new Date().toISOString(),
+            createdBy: ctx.from?.id.toString(),
+          });
+        }
+
+        // Save questions to the chapter's questions subcollection
+        const questionsCollection = db.collection('chapters').doc(chapterId).collection('questions');
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
           const questionData = {
-            subject: submission.subject,
-            chapter: submission.chapter,
             question: q.question,
             questionImage: q.questionImage || null,
             options: q.options,
             correctOption: q.correctOption,
-            explanation: q.explanation,
+            explanation: q.explanation || null,
+            explanationImage: null, // Add support for explanation images if needed
             createdAt: new Date().toISOString(),
             createdBy: ctx.from?.id.toString(),
-            from: q.from,
           };
-          await addDoc(questionsCollection, questionData);
+          await questionsCollection.doc(questionId).set(questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
