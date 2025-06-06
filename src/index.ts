@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, getDocs, query, where, storage, uploadTelegramPhoto } from './utils/firebase';
+import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -17,6 +17,7 @@ import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './commands/pin';
 import { logoCommand } from './commands/logo';
+import { getDocs, query, where, collection as firestoreCollection } from 'firebase/firestore';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
@@ -164,7 +165,7 @@ bot.action('refresh_users', async (ctx) => {
     await ctx.editMessageText(`📊 Total users: ${totalUsers} (refreshed)`, {
       parse_mode: 'Markdown',
       reply_markup: {
-        inline_keyboard: [[{ text: 'Refresh', bragging_data: 'refresh_users' }]],
+        inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
       },
     });
     await ctx.answerCbQuery('Refreshed!');
@@ -260,7 +261,7 @@ bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
 
   const chapters = await fetchChapters(subject);
   if (chapters.length === 0) {
-    return ctx.reply(`❌ No chapters found for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count> or create a chapter first.`);
+    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
   }
 
   const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
@@ -376,7 +377,7 @@ bot.on('message', async (ctx) => {
     const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
-    const imagePath = `chapters/${submission.subject}_${submission.chapter}/questions/${questionId}/question.jpg`;
+    const imagePath = `chapters/${submission.subject}/${submission.chapter}/questions/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
@@ -432,7 +433,7 @@ bot.on('message', async (ctx) => {
 
     const poll = msg.poll;
 
-    if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
+    if (submission.expectingImageaskedForQuestionNumber === questionNumber) {
       submission.questions.push({
         question: poll.question,
         options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })),
@@ -462,17 +463,15 @@ bot.on('message', async (ctx) => {
     } else {
       try {
         // Check if chapter exists, create if not
-        let chapterId: string;
-        const chapterQuery = await getDocs(
-          query(
-            collection(db, 'chapters'),
-            where('subject', '==', submission.subject),
-            where('chapterName', '==', submission.chapter)
-          )
+        let chapterId: string | null = null;
+        const chapterQuery = query(
+          collection(db, 'chapters'),
+          where('subject', '==', submission.subject),
+          where('chapterName', '==', submission.chapter)
         );
-
-        if (!chapterQuery.empty) {
-          chapterId = chapterQuery.docs[0].id;
+        const chapterSnapshot = await getDocs(chapterQuery);
+        if (!chapterSnapshot.empty) {
+          chapterId = chapterSnapshot.docs[0].id;
         } else {
           chapterId = generateQuestionId();
           await addDoc(collection(db, 'chapters'), {
@@ -483,8 +482,7 @@ bot.on('message', async (ctx) => {
           });
         }
 
-        // Save questions to Firestore
-        const questionsCollection = collection(db, `chapters/${chapterId}/questions`);
+        // Save questions to Firestore under chapters/{chapterId}/questions
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
           const questionData = {
@@ -497,7 +495,7 @@ bot.on('message', async (ctx) => {
             createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
-          await addDoc(questionsCollection, questionData);
+          await addDoc(collection(db, `chapters/${chapterId}/questions`), questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
