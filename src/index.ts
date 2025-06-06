@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, setDoc, doc, getDocs, query, where, storage, uploadTelegramPhoto } from './utils/firebase';
+import { db, collection, addDoc, setDoc, doc, getDocs, query, where, storage, uploadTelegramPhoto, auth, currentUser } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -94,13 +94,20 @@ async function createTelegraphPage(title: string, content: string) {
 
 // --- FETCH CHAPTERS ---
 async function fetchChapters(subject: string): Promise<string[]> {
+  if (!currentUser) {
+    console.error('No authenticated user for fetching chapters');
+    return [];
+  }
+  console.log(`Fetching chapters for subject: ${subject}`);
   try {
     const chaptersQuery = query(
       collection(db, 'chapters'),
       where('subject', '==', subject)
     );
+    console.log('Executing Firestore query');
     const chaptersSnapshot = await getDocs(chaptersQuery);
     const chapters = [...new Set(chaptersSnapshot.docs.map(doc => doc.data().chapterName))].sort();
+    console.log(`Retrieved chapters: ${chapters}`);
     return chapters;
   } catch (error) {
     console.error(`Error fetching chapters for ${subject}:`, error);
@@ -239,6 +246,10 @@ bot.command(/add[A-Za-z]+00[A-Za-z0-9_]+/, async (ctx) => {
     return ctx.reply('You are not authorized to use this command.');
   }
 
+  if (!currentUser) {
+    return ctx.reply('❌ Error: Bot is not authenticated. Please check Firebase configuration.');
+  }
+
   const command = ctx.message.text?.split(' ')[0].substring(1);
   const countStr = ctx.message.text?.split(' ')[1];
   const count = parseInt(countStr, 10);
@@ -268,12 +279,12 @@ bot.command(/add[A-Za-z]+00[A-Za-z0-9_]+/, async (ctx) => {
         subject,
         chapterName: chapter,
         createdAt: new Date().toISOString(),
-        createdBy: ctx.from?.id.toString(),
+        createdBy: currentUser.uid,
       });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error checking or creating chapter:', error);
-    return ctx.reply('❌ Error: Unable to verify or create chapter in Firestore.');
+    return ctx.reply(`❌ Error: Unable to verify or create chapter in Firestore: ${error.message}`);
   }
 
   pendingSubmissions[ctx.from.id] = {
@@ -359,13 +370,44 @@ bot.on('message', async (ctx) => {
   }
 
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
+    if (!currentUser) {
+      await ctx.reply('❌ Error: Bot is not authenticated. Please check Firebase configuration.');
+      return;
+    }
+
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.expectingImageOrPollForQuestionNumber;
+
+    // Get chapterId
+    let chapterId: string | null = null;
+    try {
+      const chapterQuery = query(
+        collection(db, 'chapters'),
+        where('subject', '==', submission.subject),
+        where('chapterName', '==', submission.chapter)
+      );
+      const chapterSnapshot = await getDocs(chapterQuery);
+      if (!chapterSnapshot.empty) {
+        chapterId = chapterSnapshot.docs[0].id;
+      } else {
+        chapterId = generateQuestionId();
+        await setDoc(doc(db, 'chapters', chapterId), {
+          subject: submission.subject,
+          chapterName: submission.chapter,
+          createdAt: new Date().toISOString(),
+          createdBy: currentUser.uid,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error checking or creating chapter for image upload:', error);
+      await ctx.reply(`❌ Error: Unable to verify or create chapter in Firestore: ${error.message}`);
+      return;
+    }
 
     const photo = msg.photo[msg.photo.length - 1];
     const fileId = photo.file_id;
     const questionId = generateQuestionId();
-    const imagePath = `chapters/${submission.chapter}/${questions}/${questionId}/question.jpg`;
+    const imagePath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
 
     try {
       const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
@@ -387,9 +429,9 @@ bot.on('message', async (ctx) => {
       } else {
         await ctx.reply('❌ Failed to upload image. Please try again or send the poll to proceed without an image.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Image upload error:', error);
-      await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or send the poll to proceed without an image.');
+      await ctx.reply(`❌ Error uploading image to Firebase Storage: ${error.message}`);
     }
     return;
   }
@@ -416,6 +458,11 @@ bot.on('message', async (ctx) => {
   }
 
   if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
+    if (!currentUser) {
+      await ctx.reply('❌ Error: Bot is not authenticated. Please check Firebase configuration.');
+      return;
+    }
+
     const submission = pendingSubmissions[chat.id];
     const questionNumber = submission.questions.length + 1;
 
@@ -437,12 +484,12 @@ bot.on('message', async (ctx) => {
           subject: submission.subject,
           chapterName: submission.chapter,
           createdAt: new Date().toISOString(),
-          createdBy: ctx.from?.id.toString(),
+          createdBy: currentUser.uid,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error checking or creating chapter:', error);
-      await ctx.reply('❌ Error: Unable to verify or create chapter in Firestore.');
+      await ctx.reply(`❌ Error: Unable to verify or create chapter in Firestore: ${error.message}`);
       return;
     }
 
@@ -484,7 +531,7 @@ bot.on('message', async (ctx) => {
             correctOption: q.correctOption,
             explanation: q.explanation,
             createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
+            createdBy: currentUser.uid,
             from: q.from,
           };
           await addDoc(collection(db, 'chapters', chapterId, 'questions'), questionData);
@@ -493,11 +540,7 @@ bot.on('message', async (ctx) => {
         delete pendingSubmissions[chat.id];
       } catch (error: any) {
         console.error('Failed to save questions to Firestore:', error);
-        if (error.code === 'permission-denied') {
-          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase configuration.');
-        } else {
-          await ctx.reply('❌ Error: Unable to save questions to Firestore.');
-        }
+        await ctx.reply(`❌ Error: Unable to save questions to Firestore: ${error.message}`);
       }
     }
     return;
