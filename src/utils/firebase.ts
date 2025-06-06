@@ -9,7 +9,7 @@ import {
   query,
   where
 } from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth, signInAnonymously, User } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { getDatabase, ref as dbRef, set, onValue, remove, off } from 'firebase/database';
 
@@ -31,17 +31,30 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 const realtimeDb = getDatabase(app);
 
-// Sign in anonymously on initialization
-signInAnonymously(auth)
-  .then(() => {
-    console.log('Signed in anonymously');
-  })
-  .catch((error) => {
+// Initialize anonymous authentication and wait for it
+let currentUser: User | null = null;
+async function initializeAuth(): Promise<void> {
+  try {
+    const userCredential = await signInAnonymously(auth);
+    currentUser = userCredential.user;
+    console.log('Signed in anonymously with UID:', currentUser.uid);
+  } catch (error) {
     console.error('Anonymous sign-in failed:', error);
-  });
+    throw error;
+  }
+}
+
+// Call initializeAuth and handle errors
+initializeAuth().catch((error) => {
+  console.error('Failed to initialize authentication:', error);
+});
 
 // Upload image from URL to Firebase Storage
 async function uploadImageFromUrl(imageUrl: string, path: string): Promise<string | null> {
+  if (!currentUser) {
+    console.error('No authenticated user for storage upload');
+    return null;
+  }
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -62,6 +75,10 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
 
 // Upload Telegram photo to Firebase Storage
 async function uploadTelegramPhoto(fileId: string, botToken: string, path: string): Promise<string | null> {
+  if (!currentUser) {
+    console.error('No authenticated user for Telegram photo upload');
+    return null;
+  }
   try {
     // Get file path from Telegram
     const fileResponse = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
@@ -88,6 +105,7 @@ export {
   getDocs,
   query,
   where,
+  auth,
   storage,
   uploadImageFromUrl,
   uploadTelegramPhoto,
@@ -96,5 +114,6 @@ export {
   set,
   onValue,
   remove,
-  off
+  off,
+  currentUser
 };
