@@ -346,192 +346,117 @@ bot.on('message', async (ctx) => {
     return;
   }
 
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
-    const submission = pendingSubmissions[chat.id];
-    const chapterNumber = parseInt(msg.text.trim(), 10);
+  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
+  const submission = pendingSubmissions[chat.id];
+  const questionNumber = submission.questions.length + 1;
+  const poll = msg.poll;
 
-    const chapters = await fetchChapters(submission.subject);
-    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > chapters.length) {
-      await ctx.reply(`Please enter a valid chapter number between 1 and ${chapters.length}.`);
-      return;
-    }
-
-    submission.chapter = chapters[chapterNumber - 1];
-    submission.awaitingChapterSelection = false;
-    submission.expectingImageOrPollForQuestionNumber = 1;
-
-    await ctx.reply(
-      `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
-      `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
-      `You can also reply "skip" to explicitly skip the image.`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
-    const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.expectingImageOrPollForQuestionNumber;
-    const questionId = generateQuestionId();
-    const tempImagePath = `questions/${questionId}/question.jpg`;
-
-    const photo = msg.photo[msg.photo.length - 1];
-    const fileId = photo.file_id;
-
-    try {
-      const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, tempImagePath);
-      if (downloadUrl) {
-        submission.questions.push({
-          question: '',
-          options: [],
-          correctOption: null,
-          explanation: null,
-          questionImage: downloadUrl,
-          from: { id: ctx.from?.id },
-        });
-
-        await ctx.reply(
-          `Image for question ${questionNumber} saved. Please send the poll for question ${questionNumber} ` +
-          `with the question and options.`,
-          { parse_mode: 'Markdown' }
-        );
-      } else {
-        await ctx.reply('❌ Failed to upload image. Please try again or send the poll to proceed without an image.');
-      }
-    } catch (error) {
-      console.error('Image upload error:', error);
-      await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or send the poll to proceed without an image.');
-    }
-    return;
-  }
-
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.text?.toLowerCase() === 'skip') {
-    const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.expectingImageOrPollForQuestionNumber;
-
+  if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
     submission.questions.push({
-      question: '',
-      options: [],
-      correctOption: null,
-      explanation: null,
+      question: poll.question,
+      options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })),
+      correctOption: poll.type === 'quiz' ? poll.correct_option_id : null,
+      explanation: poll.explanation || null,
       questionImage: null,
       from: { id: ctx.from?.id },
     });
+  } else if (submission.questions.length > 0 && submission.questions[questionNumber - 2].question === '') {
+    const lastQuestion = submission.questions[questionNumber - 2];
+    lastQuestion.question = poll.question;
+    lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
+    lastQuestion.correctOption = poll.type === 'quiz' ? poll.correct_option_id : null;
+    lastQuestion.explanation = poll.explanation || null;
+  } else {
+    await ctx.reply('Please send an image, reply "skip", or ensure the previous question is completed before sending a poll.');
+    return;
+  }
 
+  if (submission.questions.length < submission.count) {
+    submission.expectingImageOrPollForQuestionNumber = submission.questions.length + 1;
     await ctx.reply(
-      `No image for question ${questionNumber}. Please send the poll for question ${questionNumber} ` +
-      `with the question and options.`,
+      `Question ${questionNumber} saved. Please send an image for question ${submission.questions.length + 1} (optional) ` +
+      `or send the poll directly to proceed without an image. You can also reply "skip" to explicitly skip the image.`,
       { parse_mode: 'Markdown' }
     );
-    return;
-  }
+  } else {
+    try {
+      // Get authenticated user UID
+      const userUid = await getCurrentUserUid();
+      console.log('Saving questions with UID:', userUid, 'Data:', JSON.stringify(submission.questions));
 
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
-    const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.questions.length + 1;
-    const poll = msg.poll;
-
-    if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
-      submission.questions.push({
-        question: poll.question,
-        options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })),
-        correctOption: poll.type === 'quiz' ? poll.correct_option_id : null,
-        explanation: poll.explanation || null,
-        questionImage: null,
-        from: { id: ctx.from?.id },
-      });
-    } else if (submission.questions.length > 0 && submission.questions[questionNumber - 2].question === '') {
-      const lastQuestion = submission.questions[questionNumber - 2];
-      lastQuestion.question = poll.question;
-      lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
-      lastQuestion.correctOption = poll.type === 'quiz' ? poll.correct_option_id : null;
-      lastQuestion.explanation = poll.explanation || null;
-    } else {
-      await ctx.reply('Please send an image, reply "skip", or ensure the previous question is completed before sending a poll.');
-      return;
-    }
-
-    if (submission.questions.length < submission.count) {
-      submission.expectingImageOrPollForQuestionNumber = submission.questions.length + 1;
-      await ctx.reply(
-        `Question ${questionNumber} saved. Please send an image for question ${submission.questions.length + 1} (optional) ` +
-        `or send the poll directly to proceed without an image. You can also reply "skip" to explicitly skip the image.`,
-        { parse_mode: 'Markdown' }
+      // Check if chapter exists or create a new one
+      let chapterId: string;
+      const chaptersCollection = collection(db, 'chapters');
+      const chapterQuery = query(
+        chaptersCollection,
+        where('subject', '==', submission.subject),
+        where('chapterName', '==', submission.chapter)
       );
-    } else {
-      try {
-        // Check if chapter exists or create a new one
-        let chapterId: string;
-        const chaptersCollection = collection(db, 'chapters');
-        const chapterQuery = query(
-          chaptersCollection,
-          where('subject', '==', submission.subject),
-          where('chapterName', '==', submission.chapter)
-        );
-        const chapterSnapshot = await getDocs(chapterQuery);
+      const chapterSnapshot = await getDocs(chapterQuery);
 
-        if (!chapterSnapshot.empty) {
-          chapterId = chapterSnapshot.docs[0].id;
-        } else {
-          chapterId = generateQuestionId();
-          await addDoc(chaptersCollection, {
-            subject: submission.subject,
-            chapterName: submission.chapter,
-            createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
-          });
-        }
-
-        // Save questions to the chapter's questions subcollection
-        const questionsCollection = collection(db, `chapters/${chapterId}/questions`);
-        for (const q of submission.questions) {
-          const questionId = generateQuestionId();
-          let questionImageUrl = q.questionImage;
-          if (questionImageUrl) {
-            const oldPath = decodeURIComponent(questionImageUrl.split('/o/')[1].split('?')[0]);
-            const newPath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
-            const newStorageRef = storageRef(storage, newPath);
-
-            // Fetch and re-upload image to new path
-            const response = await fetch(questionImageUrl);
-            if (!response.ok) throw new Error('Failed to fetch image for re-upload');
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            await uploadBytes(newStorageRef, buffer);
-            questionImageUrl = await getDownloadURL(newStorageRef);
-
-            // Delete old image
-            const oldStorageRef = storageRef(storage, oldPath);
-            await deleteObject(oldStorageRef).catch((err) => console.warn('Failed to delete old image:', err));
-          }
-
-          const questionData = {
-            question: q.question,
-            questionImage: questionImageUrl || null,
-            options: q.options,
-            correctOption: q.correctOption,
-            explanation: q.explanation || null,
-            explanationImage: null,
-            createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
-            from: q.from,
-          };
-          await addDoc(questionsCollection, questionData);
-        }
-        await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
-        delete pendingSubmissions[chat.id];
-      } catch (error: any) {
-        console.error('Failed to save questions to Firestore:', error);
-        if (error.code === 'permission-denied') {
-          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase rules.');
-        } else {
-          await ctx.reply(`❌ Error: Unable to save questions to Firestore: ${error.message}`);
-        }
-        delete pendingSubmissions[chat.id]; // Clean up on error
+      if (!chapterSnapshot.empty) {
+        chapterId = chapterSnapshot.docs[0].id;
+      } else {
+        const chapterDoc = await addDoc(chaptersCollection, {
+          subject: submission.subject,
+          chapterName: submission.chapter,
+          createdAt: new Date().toISOString(),
+          createdBy: userUid,
+        });
+        chapterId = chapterDoc.id;
       }
+
+      // Save questions to the chapter's questions subcollection
+      const questionsCollection = collection(db, `chapters/${chapterId}/questions`);
+      for (const q of submission.questions) {
+        const questionId = generateQuestionId();
+        let questionImageUrl = q.questionImage;
+        if (questionImageUrl) {
+          const oldPath = decodeURIComponent(questionImageUrl.split('/o/')[1].split('?')[0]);
+          const newPath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
+          const newStorageRef = storageRef(storage, newPath);
+
+          // Fetch and re-upload image to new path
+          const response = await fetch(questionImageUrl);
+          if (!response.ok) throw new Error('Failed to fetch image for re-upload');
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          await uploadBytes(newStorageRef, buffer);
+          questionImageUrl = await getDownloadURL(newStorageRef);
+
+          // Delete old image
+          const oldStorageRef = storageRef(storage, oldPath);
+          await deleteObject(oldStorageRef).catch((err) => console.warn('Failed to delete old image:', err));
+        }
+
+        const questionData = {
+          question: q.question,
+          questionImage: questionImageUrl || null,
+          options: q.options,
+          correctOption: q.correctOption,
+          explanation: q.explanation || null,
+          explanationImage: null,
+          createdAt: new Date().toISOString(),
+          createdBy: userUid,
+          from: q.from,
+        };
+        console.log('Saving question:', JSON.stringify(questionData));
+        await addDoc(questionsCollection, questionData);
+      }
+      await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
+      delete pendingSubmissions[chat.id];
+    } catch (error: any) {
+      console.error('Failed to save questions to Firestore:', error);
+      if (error.code === 'permission-denied') {
+        await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase rules.');
+      } else {
+        await ctx.reply(`❌ Error: Unable to save questions to Firestore: ${error.message}`);
+      }
+      delete pendingSubmissions[chat.id];
     }
-    return;
   }
+  return;
+}
 
   if (msg.poll && ctx.from?.id !== ADMIN_ID) {
     try {
