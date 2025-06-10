@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getStorage, ref as storageRef, uploadString, getDownloadURL, uploadBytes, deleteObject } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getDatabase, ref as dbRef, set, onValue, remove, off } from 'firebase/database';
 
 // Firebase configuration
@@ -22,13 +22,28 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 const realtimeDb = getDatabase(app);
 
-// Sign in anonymously on initialization
-signInAnonymously(auth)
-  .then(() => {
-    console.log('Signed in anonymously');
-  })
+// Retry logic for anonymous sign-in
+async function signInWithRetry(attempts = 3, delay = 1000): Promise<void> {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      await signInAnonymously(auth);
+      console.log('Signed in anonymously');
+      return;
+    } catch (error) {
+      console.error(`Anonymous sign-in attempt ${i} failed:`, error);
+      if (i === attempts) {
+        console.error('Max retry attempts reached for anonymous sign-in');
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay * i)); // Exponential backoff
+    }
+  }
+}
+
+// Initialize anonymous sign-in
+signInWithRetry()
   .catch((error) => {
-    console.error('Anonymous sign-in failed:', error);
+    console.error('Anonymous sign-in failed after retries:', error);
   });
 
 // Upload image from URL to Firebase Storage
@@ -53,7 +68,6 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
 // Upload Telegram photo to Firebase Storage
 async function uploadTelegramPhoto(fileId: string, botToken: string, path: string): Promise<string | null> {
   try {
-    // Get file path from Telegram
     const fileResponse = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
     const fileData = await fileResponse.json();
     if (!fileData.ok) throw new Error(`Telegram API error: ${fileData.description}`);
@@ -61,7 +75,6 @@ async function uploadTelegramPhoto(fileId: string, botToken: string, path: strin
     const filePath = fileData.result.file_path;
     const imageUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
 
-    // Upload image using uploadImageFromUrl
     return await uploadImageFromUrl(imageUrl, path);
   } catch (error) {
     console.error('Error uploading Telegram photo:', error);
