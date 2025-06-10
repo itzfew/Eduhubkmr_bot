@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, uploadBytes, deleteObject } from 'firebase/storage';
 import { getDatabase, ref as dbRef, set, onValue, remove, off } from 'firebase/database';
 
 // Firebase configuration
@@ -39,10 +39,9 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
     
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const base64Data = buffer.toString('base64');
     
     const storageReference = storageRef(storage, path);
-    await uploadString(storageReference, base64Data, 'base64');
+    await uploadBytes(storageReference, buffer);
     const downloadUrl = await getDownloadURL(storageReference);
     return downloadUrl;
   } catch (error) {
@@ -74,9 +73,14 @@ export {
   db,
   collection,
   addDoc,
+  query,
+  where,
+  getDocs,
   storage,
+  storageRef,
   uploadImageFromUrl,
   uploadTelegramPhoto,
+  deleteObject,
   realtimeDb,
   dbRef as ref,
   set,
