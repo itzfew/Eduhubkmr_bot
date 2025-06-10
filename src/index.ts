@@ -208,7 +208,6 @@ bot.command('reply', async (ctx) => {
   }
 });
 
-// User greeting and message handling
 bot.start(async (ctx) => {
   if (isPrivateChat(ctx.chat.type)) {
     await ctx.reply('Welcome! Use /help to explore commands.');
@@ -216,10 +215,8 @@ bot.start(async (ctx) => {
   }
 });
 
-// Handle button clicks (quiz)
 bot.on('callback_query', handleQuizActions());
 
-// --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
   const msg = ctx.message as any;
@@ -279,7 +276,6 @@ bot.on('message', async (ctx) => {
     await greeting()(ctx);
   }
 });
-
 // --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
   await production(req, res, bot);
