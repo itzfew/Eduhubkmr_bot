@@ -1,6 +1,6 @@
 {
   "name": "Eduhub",
-  "version": "1.1.1", 
+  "version": "1.1.1",
   "description": "Telegram Bot EduHub",
   "main": "src/index.ts",
   "author": "itzfew (https://t.me/itzfew)",
@@ -10,7 +10,7 @@
     "axios": "^1.6.8",
     "date-fns": "^3.6.0",
     "dotenv-cli": "^7.4.2",
-    "firebase": "^10.14.1", 
+    "firebase": "^10.14.1",
     "telegraf": "^4.16.3",
     "fastest-levenshtein": "^1.0.12"
   },
@@ -27,14 +27,15 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
-    "dev": "DEBUG=bot* dotenv -e .env -- nodemon -e ts -x ts-node src/index.ts", 
-    "devWindows": "powershell -Command \"$env:DEBUG='bot*'; dotenv -e .env -- nodemon -e ts -x ts-node src/index.ts\"", 
-    "build": "ncc build src/index.ts -o public -m", 
-    "prettier": "prettier --write 'src/**/*.ts'", 
-    "lint": "tsc --noEmit", 
-    "start": "node public/index.js"
+    "dev": "DEBUG=bot* dotenv -e .env -- nodemon -e ts -x ts-node src/index.ts",
+    "devWindows": "powershell -Command \"$env:DEBUG='bot*'; dotenv -e .env -- nodemon -e ts -x ts-node src/index.ts\"",
+    "build": "ncc build src/index.ts -o public -m",
+    "prettier": "prettier --write 'src/**/*.ts'",
+    "lint": "tsc --noEmit",
+    "start": "node public/index.js",
+    "typecheck": "tsc --noEmit --strict"
   },
   "engines": {
-    "node": ">=18.0.0" 
+    "node": ">=18.0.0"
   }
 }
