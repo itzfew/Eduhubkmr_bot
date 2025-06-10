@@ -27,7 +27,7 @@ async function signInWithRetry(attempts = 3, delay = 1000): Promise<void> {
   for (let i = 1; i <= attempts; i++) {
     try {
       await signInAnonymously(auth);
-      console.log('Signed in anonymously');
+      console.log('Signed in anonymously, UID:', auth.currentUser?.uid);
       return;
     } catch (error) {
       console.error(`Anonymous sign-in attempt ${i} failed:`, error);
@@ -35,9 +35,20 @@ async function signInWithRetry(attempts = 3, delay = 1000): Promise<void> {
         console.error('Max retry attempts reached for anonymous sign-in');
         throw error;
       }
-      await new Promise(resolve => setTimeout(resolve, delay * i)); // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, delay * i));
     }
   }
+}
+
+// Get current user UID
+async function getCurrentUserUid(): Promise<string> {
+  if (!auth.currentUser) {
+    await signInWithRetry();
+  }
+  if (!auth.currentUser) {
+    throw new Error('Failed to authenticate user');
+  }
+  return auth.currentUser.uid;
 }
 
 // Initialize anonymous sign-in
@@ -99,5 +110,6 @@ export {
   set,
   onValue,
   remove,
-  off
+  off,
+  getCurrentUserUid
 };
