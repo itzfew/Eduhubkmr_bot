@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { getDatabase, ref as dbRef, set, onValue, remove, off } from 'firebase/database';
 
 // Firebase configuration
@@ -22,39 +22,13 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 const realtimeDb = getDatabase(app);
 
-// Retry logic for anonymous sign-in
-async function signInWithRetry(attempts = 3, delay = 1000): Promise<void> {
-  for (let i = 1; i <= attempts; i++) {
-    try {
-      await signInAnonymously(auth);
-      console.log('Signed in anonymously, UID:', auth.currentUser?.uid);
-      return;
-    } catch (error) {
-      console.error(`Anonymous sign-in attempt ${i} failed:`, error);
-      if (i === attempts) {
-        console.error('Max retry attempts reached for anonymous sign-in');
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, delay * i));
-    }
-  }
-}
-
-// Get current user UID
-async function getCurrentUserUid(): Promise<string> {
-  if (!auth.currentUser) {
-    await signInWithRetry();
-  }
-  if (!auth.currentUser) {
-    throw new Error('Failed to authenticate user');
-  }
-  return auth.currentUser.uid;
-}
-
-// Initialize anonymous sign-in
-signInWithRetry()
+// Sign in anonymously on initialization
+signInAnonymously(auth)
+  .then(() => {
+    console.log('Signed in anonymously');
+  })
   .catch((error) => {
-    console.error('Anonymous sign-in failed after retries:', error);
+    console.error('Anonymous sign-in failed:', error);
   });
 
 // Upload image from URL to Firebase Storage
@@ -65,9 +39,10 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
     
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const base64Data = buffer.toString('base64');
     
     const storageReference = storageRef(storage, path);
-    await uploadBytes(storageReference, buffer);
+    await uploadString(storageReference, base64Data, 'base64');
     const downloadUrl = await getDownloadURL(storageReference);
     return downloadUrl;
   } catch (error) {
@@ -79,6 +54,7 @@ async function uploadImageFromUrl(imageUrl: string, path: string): Promise<strin
 // Upload Telegram photo to Firebase Storage
 async function uploadTelegramPhoto(fileId: string, botToken: string, path: string): Promise<string | null> {
   try {
+    // Get file path from Telegram
     const fileResponse = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
     const fileData = await fileResponse.json();
     if (!fileData.ok) throw new Error(`Telegram API error: ${fileData.description}`);
@@ -86,6 +62,7 @@ async function uploadTelegramPhoto(fileId: string, botToken: string, path: strin
     const filePath = fileData.result.file_path;
     const imageUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
 
+    // Upload image using uploadImageFromUrl
     return await uploadImageFromUrl(imageUrl, path);
   } catch (error) {
     console.error('Error uploading Telegram photo:', error);
@@ -97,19 +74,13 @@ export {
   db,
   collection,
   addDoc,
-  query,
-  where,
-  getDocs,
   storage,
-  storageRef,
   uploadImageFromUrl,
   uploadTelegramPhoto,
-  deleteObject,
   realtimeDb,
   dbRef as ref,
   set,
   onValue,
   remove,
-  off,
-  getCurrentUserUid
+  off
 };
