@@ -1,7 +1,7 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
+import { db, collection, addDoc, query, where, getDocs, storage, storageRef, uploadTelegramPhoto, deleteObject } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -110,7 +110,7 @@ async function fetchChapters(subject: string): Promise<string[]> {
 
 // Generate unique question ID
 function generateQuestionId(): string {
-  return 'id_' + Math.random().toString(36).substr(2, 9); // Match HTML's generateId
+  return 'id_' + Math.random().toString(36).substr(2, 9);
 }
 
 // --- COMMANDS ---
@@ -461,17 +461,20 @@ bot.on('message', async (ctx) => {
     } else {
       try {
         // Check if chapter exists or create a new one
-        let chapterId;
-        const chapterQuery = await db.collection('chapters')
-          .where('subject', '==', submission.subject)
-          .where('chapterName', '==', submission.chapter)
-          .get();
+        let chapterId: string;
+        const chaptersCollection = collection(db, 'chapters');
+        const chapterQuery = query(
+          chaptersCollection,
+          where('subject', '==', submission.subject),
+          where('chapterName', '==', submission.chapter)
+        );
+        const chapterSnapshot = await getDocs(chapterQuery);
 
-        if (!chapterQuery.empty) {
-          chapterId = chapterQuery.docs[0].id;
+        if (!chapterSnapshot.empty) {
+          chapterId = chapterSnapshot.docs[0].id;
         } else {
           chapterId = generateQuestionId();
-          await db.collection('chapters').doc(chapterId).set({
+          await addDoc(chaptersCollection, {
             subject: submission.subject,
             chapterName: submission.chapter,
             createdAt: new Date().toISOString(),
@@ -480,22 +483,26 @@ bot.on('message', async (ctx) => {
         }
 
         // Save questions to the chapter's questions subcollection
-        const questionsCollection = db.collection('chapters').doc(chapterId).collection('questions');
+        const questionsCollection = collection(db, `chapters/${chapterId}/questions`);
         for (const q of submission.questions) {
           const questionId = generateQuestionId();
-          // Update image path to match chapterId
           let questionImageUrl = q.questionImage;
           if (questionImageUrl) {
-            const oldPath = questionImageUrl.split('/o/')[1].split('?')[0];
+            const oldPath = decodeURIComponent(questionImageUrl.split('/o/')[1].split('?')[0]);
             const newPath = `chapters/${chapterId}/questions/${questionId}/question.jpg`;
-            // Move image to correct path in Firebase Storage
-            const oldRef = storage.ref(oldPath);
-            const newRef = storage.ref(newPath);
+            const newStorageRef = storageRef(storage, newPath);
+
+            // Fetch and re-upload image to new path
             const response = await fetch(questionImageUrl);
-            const blob = await response.blob();
-            await newRef.put(blob);
-            questionImageUrl = await newRef.getDownloadURL();
-            await oldRef.delete().catch(() => {}); // Delete old image
+            if (!response.ok) throw new Error('Failed to fetch image for re-upload');
+            const arrayBuffer = await response.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            await uploadBytes(newStorageRef, buffer);
+            questionImageUrl = await getDownloadURL(newStorageRef);
+
+            // Delete old image
+            const oldStorageRef = storageRef(storage, oldPath);
+            await deleteObject(oldStorageRef).catch((err) => console.warn('Failed to delete old image:', err));
           }
 
           const questionData = {
@@ -504,22 +511,23 @@ bot.on('message', async (ctx) => {
             options: q.options,
             correctOption: q.correctOption,
             explanation: q.explanation || null,
-            explanationImage: null, // Not supported in current bot flow
+            explanationImage: null,
             createdAt: new Date().toISOString(),
             createdBy: ctx.from?.id.toString(),
             from: q.from,
           };
-          await questionsCollection.doc(questionId).set(questionData);
+          await addDoc(questionsCollection, questionData);
         }
         await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
         delete pendingSubmissions[chat.id];
       } catch (error: any) {
         console.error('Failed to save questions to Firestore:', error);
         if (error.code === 'permission-denied') {
-          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase configuration.');
+          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase rules.');
         } else {
-          await ctx.reply('❌ Error: Unable to save questions to Firestore.');
+          await ctx.reply(`❌ Error: Unable to save questions to Firestore: ${error.message}`);
         }
+        delete pendingSubmissions[chat.id]; // Clean up on error
       }
     }
     return;
@@ -540,6 +548,12 @@ bot.on('message', async (ctx) => {
   if (isPrivateChat(chatType)) {
     await greeting()(ctx);
   }
+});
+
+// Clean up pending submissions on bot stop
+process.on('SIGTERM', () => {
+  Object.keys(pendingSubmissions).forEach((key) => delete pendingSubmissions[Number(key)]);
+  console.log('Cleaned up pending submissions');
 });
 
 // --- DEPLOYMENT ---
