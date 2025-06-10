@@ -30,7 +30,7 @@ async function createTelegraphAccount() {
   try {
     const res = await fetch('https://api.telegra.ph/createAccount', {
       method: 'POST',
-      headers: { 'RuleType': 'application/json' },
+      headers: { 'Content-Type': 'application/json' }, // Fixed 'RuleType' to 'Content-Type'
       body: JSON.stringify({ short_name: 'EduhubBot', author_name: 'Eduhub KMR Bot' }),
     });
     const data = await res.json();
@@ -77,7 +77,7 @@ async function fetchChapters(subject: string): Promise<string[]> {
   const subjectFile = subject.toLowerCase();
   const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(urlintregration
     if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
     const data: { chapter: string }[] = await res.json();
     const chapters = [...new Set(data.map((item) => item.chapter))];
@@ -200,7 +200,7 @@ bot.command('reply', async (ctx) => {
   }
 
   try {
-    await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}", { parse_mode: 'Markdown' });
+    await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}`, { parse_mode: 'Markdown' });
     await ctx.reply(`Reply sent to ${chatId}`, { parse_mode: 'Markdown' });
   } catch (error) {
     console.error('Reply error:', error);
@@ -208,6 +208,7 @@ bot.command('reply', async (ctx) => {
   }
 });
 
+// User greeting and message handling
 bot.start(async (ctx) => {
   if (isPrivateChat(ctx.chat.type)) {
     await ctx.reply('Welcome! Use /help to explore commands.');
@@ -215,8 +216,10 @@ bot.start(async (ctx) => {
   }
 });
 
+// Handle button clicks (quiz)
 bot.on('callback_query', handleQuizActions());
 
+// --- MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
   const chat = ctx.chat;
   const msg = ctx.message as any;
@@ -270,12 +273,22 @@ bot.on('message', async (ctx) => {
     return;
   }
 
+  if (msg.poll && ctx.from?.id !== ADMIN_ID) {
+    try {
+      await ctx.telegram.forwardMessage(ADMIN_ID, chat.id, msg.message_id);
+    } catch (error) {
+      console.error('Failed to forward poll to admin:', error);
+    }
+    return;
+  }
+
   await quizes()(ctx);
 
   if (isPrivateChat(chatType)) {
     await greeting()(ctx);
   }
 });
+
 // --- DEPLOYMENT ---
 export const startVercel = async (req: VercelRequest, res: VercelResponse) => {
   await production(req, res, bot);
