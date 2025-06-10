@@ -1,7 +1,6 @@
 import { Telegraf, Context } from 'telegraf';
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllChatIds, saveChatId, fetchChatIdsFromSheet } from './utils/chatStore';
-import { db, collection, addDoc, storage, uploadTelegramPhoto } from './utils/firebase';
 import { saveToSheet } from './utils/saveToSheet';
 import { about, help } from './commands';
 import { study } from './commands/study';
@@ -26,31 +25,12 @@ let accessToken: string | null = null;
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
 
-// Store pending question submissions
-interface PendingQuestion {
-  subject: string;
-  chapter: string;
-  count: number;
-  questions: Array<{
-    question: string;
-    options: Array<{ type: string; value: string }>;
-    correctOption: number | null;
-    explanation: string | null | undefined;
-    questionImage?: string | null | undefined;
-    from: { id: number };
-  }>;
-  expectingImageOrPollForQuestionNumber?: number;
-  awaitingChapterSelection?: boolean;
-}
-
-const pendingSubmissions: { [key: number]: PendingQuestion } = {};
-
 // --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
   try {
     const res = await fetch('https://api.telegra.ph/createAccount', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'RuleType': 'application/json' },
       body: JSON.stringify({ short_name: 'EduhubBot', author_name: 'Eduhub KMR Bot' }),
     });
     const data = await res.json();
@@ -106,11 +86,6 @@ async function fetchChapters(subject: string): Promise<string[]> {
     console.error(`Error fetching chapters for ${subject}:`, error);
     return [];
   }
-}
-
-// Generate unique question ID
-function generateQuestionId(): string {
-  return 'q_' + Math.random().toString(36).substr(2, 9);
 }
 
 // --- COMMANDS ---
@@ -225,60 +200,12 @@ bot.command('reply', async (ctx) => {
   }
 
   try {
-    await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}`, { parse_mode: 'Markdown' });
+    await ctx.telegram.sendMessage(chatId, `*Admin's Reply:*\n${message}", { parse_mode: 'Markdown' });
     await ctx.reply(`Reply sent to ${chatId}`, { parse_mode: 'Markdown' });
   } catch (error) {
     console.error('Reply error:', error);
     await ctx.reply(`Failed to send reply to ${chatId}`, { parse_mode: 'Markdown' });
   }
-});
-
-// Handle /add<subject> or /add<Subject>__<Chapter> commands
-bot.command(/add[A-Za-z]+(__[A-Za-z_]+)?/, async (ctx) => {
-  if (ctx.from?.id !== ADMIN_ID) {
-    return ctx.reply('You are not authorized to use this command.');
-  }
-
-  const command = ctx.message.text?.split(' ')[0].substring(1);
-  const countStr = ctx.message.text?.split(' ')[1];
-  const count = parseInt(countStr, 10);
-
-  if (!countStr || isNaN(count) || count <= 0) {
-    return ctx.reply('Please specify a valid number of questions.\nExample: /addBiology 10');
-  }
-
-  let subject = '';
-  let chapter = 'Random';
-
-  if (command.includes('__')) {
-    const [subj, chp] = command.split('__');
-    subject = subj.replace('add', '').replace(/_/g, ' ');
-    chapter = chp.replace(/_/g, ' ');
-  } else {
-    subject = command.replace('add', '').replace(/_/g, ' ');
-  }
-
-  const chapters = await fetchChapters(subject);
-  if (chapters.length === 0) {
-    return ctx.reply(`❌ Failed to fetch chapters for ${subject}. Please specify a chapter manually using /add${subject}__<chapter> <count>`);
-  }
-
-  const chaptersList = chapters.map((ch, index) => `${index + 1}. ${ch}`).join('\n');
-  const telegraphContent = `Chapters for ${subject}:\n${chaptersList}`;
-  const telegraphUrl = await createTelegraphPage(`Chapters for ${subject}`, telegraphContent);
-
-  pendingSubmissions[ctx.from.id] = {
-    subject,
-    chapter,
-    count,
-    questions: [],
-    expectingImageOrPollForQuestionNumber: undefined,
-    awaitingChapterSelection: true,
-  };
-
-  const replyText = `Please select a chapter for *${subject}* by replying with the chapter number:\n\n${chaptersList}\n\n` +
-                    (telegraphUrl ? `📖 View chapters on Telegraph: ${telegraphUrl}` : '');
-  await ctx.reply(replyText, { parse_mode: 'Markdown' });
 });
 
 // User greeting and message handling
@@ -342,161 +269,6 @@ bot.on('message', async (ctx) => {
       } catch (err) {
         console.error('Failed to send swipe reply:', err);
       }
-    }
-    return;
-  }
-
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id]?.awaitingChapterSelection && msg.text) {
-    const submission = pendingSubmissions[chat.id];
-    const chapterNumber = parseInt(msg.text.trim(), 10);
-
-    const chapters = await fetchChapters(submission.subject);
-    if (isNaN(chapterNumber) || chapterNumber < 1 || chapterNumber > chapters.length) {
-      await ctx.reply(`Please enter a valid chapter number between 1 and ${chapters.length}.`);
-      return;
-    }
-
-    submission.chapter = chapters[chapterNumber - 1];
-    submission.awaitingChapterSelection = false;
-    submission.expectingImageOrPollForQuestionNumber = 1;
-
-    await ctx.reply(
-      `Selected chapter: *${submission.chapter}* for *${submission.subject}*. ` +
-      `Please send an image for question 1 (optional) or send the poll directly to proceed without an image. ` +
-      `You can also reply "skip" to explicitly skip the image.`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.photo) {
-    const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.expectingImageOrPollForQuestionNumber;
-
-    const photo = msg.photo[msg.photo.length - 1];
-    const fileId = photo.file_id;
-    const questionId = generateQuestionId();
-    const imagePath = `questions/${questionId}/question.jpg`;
-
-    try {
-      const downloadUrl = await uploadTelegramPhoto(fileId, BOT_TOKEN, imagePath);
-      if (downloadUrl) {
-        submission.questions.push({
-          question: '',
-          options: [],
-          correctOption: null,
-          explanation: null,
-          questionImage: downloadUrl,
-          from: { id: ctx.from?.id },
-        });
-
-        await ctx.reply(
-          `Image for question ${questionNumber} saved. Please send the poll for question ${questionNumber} ` +
-          `with the question and options.`,
-          { parse_mode: 'Markdown' }
-        );
-      } else {
-        await ctx.reply('❌ Failed to upload image. Please try again or send the poll to proceed without an image.');
-      }
-    } catch (error) {
-      console.error('Image upload error:', error);
-      await ctx.reply('❌ Error uploading image to Firebase Storage. Please try again or send the poll to proceed without an image.');
-    }
-    return;
-  }
-
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && pendingSubmissions[chat.id].expectingImageOrPollForQuestionNumber && msg.text?.toLowerCase() === 'skip') {
-    const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.expectingImageOrPollForQuestionNumber;
-
-    submission.questions.push({
-      question: '',
-      options: [],
-      correctOption: null,
-      explanation: null,
-      questionImage: null,
-      from: { id: ctx.from?.id },
-    });
-
-    await ctx.reply(
-      `No image for question ${questionNumber}. Please send the poll for question ${questionNumber} ` +
-      `with the question and options.`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  if (chat.id === ADMIN_ID && pendingSubmissions[chat.id] && msg.poll) {
-    const submission = pendingSubmissions[chat.id];
-    const questionNumber = submission.questions.length + 1;
-
-    const poll = msg.poll;
-
-    if (submission.expectingImageOrPollForQuestionNumber === questionNumber) {
-      submission.questions.push({
-        question: poll.question,
-        options: poll.options.map((opt: any) => ({ type: 'text', value: opt.text })),
-        correctOption: poll.type === 'quiz' ? poll.correct_option_id : null,
-        explanation: poll.explanation || null,
-        questionImage: null,
-        from: { id: ctx.from?.id },
-      });
-    } else if (submission.questions.length > 0 && submission.questions[questionNumber - 2].question === '') {
-      const lastQuestion = submission.questions[questionNumber - 2];
-      lastQuestion.question = poll.question;
-      lastQuestion.options = poll.options.map((opt: any) => ({ type: 'text', value: opt.text }));
-      lastQuestion.correctOption = poll.type === 'quiz' ? poll.correct_option_id : null;
-      lastQuestion.explanation = poll.explanation || null;
-    } else {
-      await ctx.reply('Please send an image, reply "skip", or ensure the previous question is completed before sending a poll.');
-      return;
-    }
-
-    if (submission.questions.length < submission.count) {
-      submission.expectingImageOrPollForQuestionNumber = submission.questions.length + 1;
-      await ctx.reply(
-        `Question ${questionNumber} saved. Please send an image for question ${submission.questions.length + 1} (optional) ` +
-        `or send the poll directly to proceed without an image. You can also reply "skip" to explicitly skip the image.`,
-        { parse_mode: 'Markdown' }
-      );
-    } else {
-      try {
-        const questionsCollection = collection(db, 'questions');
-        for (const q of submission.questions) {
-          const questionId = generateQuestionId();
-          const questionData = {
-            subject: submission.subject,
-            chapter: submission.chapter,
-            question: q.question,
-            questionImage: q.questionImage || null,
-            options: q.options,
-            correctOption: q.correctOption,
-            explanation: q.explanation,
-            createdAt: new Date().toISOString(),
-            createdBy: ctx.from?.id.toString(),
-            from: q.from,
-          };
-          await addDoc(questionsCollection, questionData);
-        }
-        await ctx.reply(`✅ Successfully added ${submission.count} questions to *${submission.subject}* (Chapter: *${submission.chapter}*).`);
-        delete pendingSubmissions[chat.id];
-      } catch (error: any) {
-        console.error('Failed to save questions to Firestore:', error);
-        if (error.code === 'permission-denied') {
-          await ctx.reply('❌ Error: Insufficient permissions to save questions to Firestore. Please check Firebase configuration.');
-        } else {
-          await ctx.reply('❌ Error: Unable to save questions to Firestore.');
-        }
-      }
-    }
-    return;
-  }
-
-  if (msg.poll && ctx.from?.id !== ADMIN_ID) {
-    try {
-      await ctx.telegram.forwardMessage(ADMIN_ID, chat.id, msg.message_id);
-    } catch (error) {
-      console.error('Failed to forward poll to admin:', error);
     }
     return;
   }
