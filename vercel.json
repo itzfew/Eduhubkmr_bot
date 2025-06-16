@@ -7,25 +7,5 @@
       "destination": "api/index.ts"
     }
   ],
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/api",
-      "permanent": false
-    }
-  ],
-  "builds": [
-    {
-      "src": "api/index.ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "functions": {
-    "api/*.ts": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 30
-    }
-  },
-  "installCommand": "apt-get update && apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev && npm install",
-  "buildCommand": "npm run build"
+  "redirects": [{ "source": "/", "destination": "/api", "permanent": false }]
 }
