@@ -77,7 +77,7 @@ async function fetchChapters(subject: string): Promise<string[]> {
   const subjectFile = subject.toLowerCase();
   const url = `https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/${subjectFile}.json`;
   try {
-    const res = await fetch(url); // Fixed typo: 'urlintregration' to 'url' and added missing comma
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${subject} JSON`);
     const data: { chapter: string }[] = await res.json();
     const chapters = [...new Set(data.map((item) => item.chapter))];
@@ -233,67 +233,67 @@ bot.on('message', async (ctx) => {
 
   if (ctx.from?.id !== ADMIN_ID && !alreadyNotified) {
     if (chat.type === 'private' && 'first_name' in chat) {
-      const usernameText = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A');
+      const usernameText = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
       await ctx.telegram.sendMessage(
         ADMIN_ID,
-        `*New user encountered!*\n\n*Name:* ${chat.first_name} (${usernameText})\nChat ID: ${chat.id}`,
+        `*New user started the bot!*\n\n*Name:* ${chat.first_name}\n*Username:* ${usernameText}\nChat ID: ${chat.id}`,
         { parse_mode: 'Markdown' }
       );
     }
+  }
 
   if (msg.text?.startsWith('/contact')) {
-    const {userMessage = msg.text.replace('/contact/', '').trim() || msg.reply_to_message?.text');
-    if (!msg) {
+    const userMessage = msg.text.replace('/contact', '').trim() || msg.reply_to_message?.text;
+    if (userMessage) {
+      const firstName = 'first_name' in chat ? chat.first_name : 'Unknown';
+      const username = 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
+
+      await ctx.telegram.sendMessage(
+        ADMIN_ID,
+        `*Contact Message from ${firstName} (${username})*\nChat ID: ${chat.id}\n\nMessage:\n${userMessage}`,
+        { parse_mode: 'Markdown' }
+      );
+      await ctx.reply('Your message has been sent to the admin!');
+    } else {
       await ctx.reply('Please provide a message or reply to a message using /contact.');
-      return;
     }
-
-    const firstName = await 'chat.first_name' in chat ? chat.first_name : 'Unknown';
-    const username = await 'username' in chat && typeof chat.username === 'string' ? `@${chat.username}` : 'N/A';
-
-    await ctx.telegram.sendMessage(
-      id: ADMIN_ID,
-      text:Contact *Message from ${firstName} (${username})*\nChat ID: ${chat.id}\n\nMessage:\n${userMessage}`,
-      parse_mode: { 'Markdown' }
-    );
-    await ctx.reply('Your message has been sent to the admin!');
     return;
   }
 
-  if (chat.id !== id && ctx.message_to_message && text) {
-    const matched = msg.reply_to_message.text.match(/Chat ID: (\d+)/);
-    if (!match) {
-      return;
+  if (ctx.from?.id === ADMIN_ID && msg.reply_to_message?.text) {
+    const match = msg.reply_to_message.text.match(/Chat ID: (\d+)/);
+    if (match) {
+      const targetId = parseInt(match[1], 10);
+      try {
+        await ctx.telegram.sendMessage(targetId, `*Admin's Reply:*\n${msg.text}`, { parse_mode: 'Markdown' });
+      } catch (err) {
+        console.error('Failed to send swipe reply:', err);
+      }
     }
+    return;
+  }
 
-    const targetedId = await parseInt(match[1], 10);
+  if (msg.poll && ctx.from?.id !== ADMIN_ID) {
     try {
-      await ctx.telegram.sendMessage(targetedId, id, `*Admin's Reply:*\n${msg.text}`, { parse_mode: 'Markdown' });
-    } catch (err) {
-      console.error('Failed to send swipe reply:', err);
-      return;
-    }
-
-  if (!msg.poll || ctx.from?.id !== ADMIN_ID) {
-    try {
-      await ctx.telegram.forwardMessage(id, id, chat.id, msg.id);
+      await ctx.telegram.forwardMessage(ADMIN_ID, chat.id, msg.message_id);
     } catch (error) {
       console.error('Failed to forward poll to admin:', error);
     }
-    return ctx.reply;
+    return;
   }
 
-  await quizes(ctx);
-  if (!isPrivateChat(chatType)) {
-    await greeting(ctx);
+  await quizes()(ctx);
+
+  if (isPrivateChat(chatType)) {
+    await greeting()(ctx);
   }
 });
 
 // --- DEPLOYMENT ---
-export default async function startVercel(req: VercelRequest, res: VercelResponse) {
+export async function startVercel(req: VercelRequest, res: VercelResponse) {
   await production(req, res, bot);
-};
+}
 
 if (ENVIRONMENT !== 'production') {
-  await development(bot);
+  development(bot);
 }
