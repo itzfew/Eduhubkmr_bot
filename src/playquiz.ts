@@ -1,9 +1,9 @@
 import { Context } from 'telegraf';
 import axios from 'axios';
 
-interface Parsed {
+interface Paper {
   exam: string;
-  exam: string;
+  examGroup: string;
   metaId: string;
   title: string;
   year: number;
@@ -27,25 +27,25 @@ export function playquiz() {
     }
 
     try {
-      await if (!examsData.length) {
-        const { data } = await axios.get<ExamData>('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/exams.json');
-        examsData = data;
+      if (!examData.length) {
+        const { data } = await axios.get<ExamCategory[]>('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/exams.json');
+        examData = data;
       }
 
       await showExams(ctx, 0);
     } catch (err) {
       console.error('Failed to fetch exams.json:', err);
-      await ctx.reply('Failed to load exams failed. Please try again later.');
+      await ctx.reply('Failed to load exams. Please try again later.');
     }
-  }
+  };
 }
 
 async function showExams(ctx: Context, page: number) {
   const start = page * ITEMS_PER_PAGE;
   const end = start + ITEMS_PER_PAGE;
-  const examsPage = examsData.slice(start, end);
+  const examsPage = examData.slice(start, end);
 
-  const keyboard = examsPage.map((exam) => {
+  const keyboard = examsPage.map((exam: ExamCategory) => {
     return [{ text: exam.title, callback_data: `exam_${encodeURIComponent(exam.title)}` }];
   });
 
@@ -54,8 +54,8 @@ async function showExams(ctx: Context, page: number) {
   if (page > 0) {
     navButtons.push({ text: '⬅️ Previous Page', callback_data: `exams_page_${page - 1}` });
   }
-  if (end < examsData.length) {
-    navButtons.push({ text: '➡️ Next Page', callback_data: `page_${page + 1}` });
+  if (end < examData.length) {
+    navButtons.push({ text: '➡️ Next Page', callback_data: `exams_page_${page + 1}` }); // Fixed callback_data prefix
   }
   if (navButtons.length > 0) {
     keyboard.push(navButtons);
@@ -63,13 +63,13 @@ async function showExams(ctx: Context, page: number) {
 
   await ctx.reply('📝 Choose an exam:', {
     reply_markup: {
-      inline_keyboard: keyboard
-    }
+      inline_keyboard: keyboard,
+    },
   });
 }
 
 async function showPapers(ctx: Context, examTitle: string, page: number) {
-  const exam = examsData.find(e => e.title === examTitle);
+  const exam = examData.find((e: ExamCategory) => e.title === examTitle);
   if (!exam) {
     if (ctx.callbackQuery && 'id' in ctx.callbackQuery) {
       await ctx.answerCbQuery('Exam not found.');
@@ -81,11 +81,13 @@ async function showPapers(ctx: Context, examTitle: string, page: number) {
   const end = start + ITEMS_PER_PAGE;
   const papersPage = exam.papers.slice(start, end);
 
-  const keyboard = papersPage.map((paper) => {
-    return [{
-      text: paper.title,
-      callback_data: `paper_${paper.metaId}`
-    }];
+  const keyboard = papersPage.map((paper: Paper) => {
+    return [
+      {
+        text: paper.title,
+        callback_data: `paper_${paper.metaId}`,
+      },
+    ];
   });
 
   const navButtons: any[] = [];
@@ -94,7 +96,7 @@ async function showPapers(ctx: Context, examTitle: string, page: number) {
     navButtons.push({ text: '⬅️ Previous Page', callback_data: `papers_${encodeURIComponent(examTitle)}_page_${page - 1}` });
   }
   if (end < exam.papers.length) {
-    navButtons.push({ text: '➡️ Next Page', callback_data: `page_${encodeURIComponent(examTitle}_page_${page + 1}` });
+    navButtons.push({ text: '➡️ Next Page', callback_data: `papers_${encodeURIComponent(examTitle)}_page_${page + 1}` }); // Fixed callback_data prefix
   }
 
   keyboard.push([{ text: '🔙 Back to Exams', callback_data: `exams_page_0` }]);
@@ -105,8 +107,8 @@ async function showPapers(ctx: Context, examTitle: string, page: number) {
   await ctx.editMessageText(`📚 Choose a paper for *${examTitle}*`, {
     parse_mode: 'Markdown',
     reply_markup: {
-      inline_keyboard: keyboard
-    }
+      inline_keyboard: keyboard,
+    },
   });
 }
 
@@ -146,8 +148,8 @@ export function handleQuizActions() {
       const metaId = callbackData.replace('paper_', '');
 
       let selectedPaper: Paper | undefined;
-      for (const exam of examsData) {
-        const paper = exam.papers.find(p => p.metaId === metaId);
+      for (const exam of examData) {
+        const paper = exam.papers.find((p: Paper) => p.metaId === metaId);
         if (paper) {
           selectedPaper = paper;
           break;
@@ -159,11 +161,11 @@ export function handleQuizActions() {
         return;
       }
 
-      const playLink = `https://quizes.pages.dev/play?metaId=${metaId}${selectedPaper.metaId}`;
+      const playLink = `https://quizes.pages.dev/play?metaId=${selectedPaper.metaId}`; // Fixed metaId concatenation
 
       await ctx.reply(`✅ [Start ${selectedPaper.title}](${playLink})`, {
         parse_mode: 'MarkdownV2',
-        link_preview_options: { is_disabled: true }, // Fixed: Replaced 'disable_web_page_preview' with 'link_preview_options'
+        link_preview_options: { is_disabled: true },
         reply_markup: {
           inline_keyboard: [[{ text: '🔙 Back to Exams', callback_data: 'exams_page_0' }]],
         },
