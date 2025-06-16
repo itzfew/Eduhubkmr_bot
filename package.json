@@ -27,8 +27,7 @@
     "prettier": "^3.3.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
-    "@types/node-fetch": "^2.6.11",
-    "@types/canvas": "^0.0.29"
+    "@types/node-fetch": "^2.6.11"
   },
   "scripts": {
     "dev": "DEBUG=bot* dotenv -e .env -- nodemon -e ts -x ts-node src/index.ts",
