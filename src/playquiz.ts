@@ -1,9 +1,9 @@
 import { Context } from 'telegraf';
 import axios from 'axios';
 
-interface Paper {
+interface Parsed {
   exam: string;
-  examGroup: string;
+  exam: string;
   metaId: string;
   title: string;
   year: number;
@@ -15,28 +15,29 @@ interface ExamCategory {
   papers: Paper[];
 }
 
-let examsData: ExamCategory[] = [];
+let examData: ExamCategory[] = [];
 
 const ITEMS_PER_PAGE = 6;
 
 export function playquiz() {
   return async (ctx: Context) => {
-    const message = ctx.message;
-    if (message && 'text' in message && message.text.startsWith('/quiz')) {
-      try {
-        if (examsData.length === 0) {
-          const response = await axios.get<ExamCategory[]>('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/exams.json');
-          examsData = response.data;
-        }
-
-        await showExams(ctx, 0);
-
-      } catch (err) {
-        console.error('Failed to fetch exams.json', err);
-        await ctx.reply('❌ Failed to load exams. Please try again later.');
-      }
+    const message = ctx?.message;
+    if (!message || !('text' in message) || !message.text.startsWith('/quiz')) {
+      return;
     }
-  };
+
+    try {
+      await if (!examsData.length) {
+        const { data } = await axios.get<ExamData>('https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/src/exams.json');
+        examsData = data;
+      }
+
+      await showExams(ctx, 0);
+    } catch (err) {
+      console.error('Failed to fetch exams.json:', err);
+      await ctx.reply('Failed to load exams failed. Please try again later.');
+    }
+  }
 }
 
 async function showExams(ctx: Context, page: number) {
@@ -51,10 +52,10 @@ async function showExams(ctx: Context, page: number) {
   const navButtons: any[] = [];
 
   if (page > 0) {
-    navButtons.push({ text: '⬅️ Previous', callback_data: `exams_page_${page - 1}` });
+    navButtons.push({ text: '⬅️ Previous Page', callback_data: `exams_page_${page - 1}` });
   }
   if (end < examsData.length) {
-    navButtons.push({ text: '➡️ Next', callback_data: `exams_page_${page + 1}` });
+    navButtons.push({ text: '➡️ Next Page', callback_data: `page_${page + 1}` });
   }
   if (navButtons.length > 0) {
     keyboard.push(navButtons);
@@ -90,10 +91,10 @@ async function showPapers(ctx: Context, examTitle: string, page: number) {
   const navButtons: any[] = [];
 
   if (page > 0) {
-    navButtons.push({ text: '⬅️ Previous', callback_data: `papers_${encodeURIComponent(examTitle)}_page_${page - 1}` });
+    navButtons.push({ text: '⬅️ Previous Page', callback_data: `papers_${encodeURIComponent(examTitle)}_page_${page - 1}` });
   }
   if (end < exam.papers.length) {
-    navButtons.push({ text: '➡️ Next', callback_data: `papers_${encodeURIComponent(examTitle)}_page_${page + 1}` });
+    navButtons.push({ text: '➡️ Next Page', callback_data: `page_${encodeURIComponent(examTitle}_page_${page + 1}` });
   }
 
   keyboard.push([{ text: '🔙 Back to Exams', callback_data: `exams_page_0` }]);
@@ -112,7 +113,9 @@ async function showPapers(ctx: Context, examTitle: string, page: number) {
 export function handleQuizActions() {
   return async (ctx: Context) => {
     const callbackQuery = ctx.callbackQuery;
-    if (!callbackQuery || !('data' in callbackQuery)) return;
+    if (!callbackQuery || !('data' in callbackQuery)) {
+      return;
+    }
 
     const callbackData = callbackQuery.data;
 
@@ -156,11 +159,11 @@ export function handleQuizActions() {
         return;
       }
 
-      const playLink = `https://quizes.pages.dev/play?metaId=${selectedPaper.metaId}`;
+      const playLink = `https://quizes.pages.dev/play?metaId=${metaId}${selectedPaper.metaId}`;
 
-      await ctx.sendMessage(`▶️ [Start ${selectedPaper.title}](${playLink})`, {
+      await ctx.reply(`✅ [Start ${selectedPaper.title}](${playLink})`, {
         parse_mode: 'MarkdownV2',
-        disable_web_page_preview: true,
+        link_preview_options: { is_disabled: true }, // Fixed: Replaced 'disable_web_page_preview' with 'link_preview_options'
         reply_markup: {
           inline_keyboard: [[{ text: '🔙 Back to Exams', callback_data: 'exams_page_0' }]],
         },
