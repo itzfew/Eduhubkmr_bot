@@ -1,4 +1,4 @@
-import { Context } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
 import { getAllChatIds } from '../utils/chatStore';
@@ -203,7 +203,7 @@ const getChaptersMessage = async () => {
 };
 
 // Function to send a quiz to a specific chat
-const sendQuiz = async (ctx: Context | null, chatId?: number) => {
+const sendQuiz = async (bot: Telegraf<Context>, ctx: Context | null, chatId?: number) => {
   try {
     const allQuestions = await fetchQuestions();
     if (!allQuestions.length) {
@@ -226,7 +226,7 @@ const sendQuiz = async (ctx: Context | null, chatId?: number) => {
       if (ctx) {
         await ctx.replyWithPhoto({ url: question.image });
       } else if (chatId) {
-        await ctx?.telegram.sendPhoto(chatId, { url: question.image });
+        await bot.telegram.sendPhoto(chatId, { url: question.image });
       }
     }
 
@@ -240,7 +240,7 @@ const sendQuiz = async (ctx: Context | null, chatId?: number) => {
     if (ctx) {
       await ctx.sendPoll(question.question, options, pollOptions);
     } else if (chatId) {
-      await ctx?.telegram.sendPoll(chatId, question.question, options, pollOptions);
+      await bot.telegram.sendPoll(chatId, question.question, options, pollOptions);
     }
   } catch (err) {
     debug('Error sending quiz:', err);
@@ -249,11 +249,11 @@ const sendQuiz = async (ctx: Context | null, chatId?: number) => {
 };
 
 // Automatic quiz sending function
-export const sendAutomaticQuizzes = async (bot: any) => {
+export const sendAutomaticQuizzes = async (bot: Telegraf<Context>) => {
   const chatIds = getAllChatIds().filter(id => allowedChatIds.includes(id));
   for (const chatId of chatIds) {
     try {
-      await sendQuiz(null, chatId);
+      await sendQuiz(bot, null, chatId);
       debug(`Sent quiz to chat ${chatId}`);
     } catch (err) {
       debug(`Failed to send quiz to chat ${chatId}:`, err);
