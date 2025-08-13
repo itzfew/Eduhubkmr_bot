@@ -17,8 +17,57 @@ const JSON_FILES: Record<string, string> = {
   physics: `${BASE_URL}physics.json`,
 };
 
-// Store allowed chat IDs for automatic quizzes
+// Store allowed chat IDs for automatic quizzes (in-memory cache)
 let allowedChatIds: number[] = [];
+
+// Google Apps Script endpoint for allowed chat IDs
+const ALLOWED_CHAT_IDS_URL = 'https://script.google.com/macros/s/AKfycbzHPhcv79YQyIx6t-59fsc6Czm9WgL6Y4HOP2JgX4gJyi3KjZqbXOGY-zmpyceW32VI/exec';
+
+// Function to fetch allowed chat IDs from Google Sheets
+const fetchAllowedChatIds = async (): Promise<number[]> => {
+  try {
+    const response = await fetch(`${ALLOWED_CHAT_IDS_URL}?action=get`, {
+      method: 'GET',
+    });
+    const data = await response.json();
+    return data.map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
+  } catch (error) {
+    debug('Failed to fetch allowed chat IDs:', error);
+    return [];
+  }
+};
+
+// Function to save allowed chat ID to Google Sheets
+const saveAllowedChatIdToSheet = async (chatId: number): Promise<boolean> => {
+  try {
+    const response = await fetch(ALLOWED_CHAT_IDS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: String(chatId), action: 'allow' }),
+    });
+    const result = await response.text();
+    return result === 'Saved';
+  } catch (error) {
+    debug('Error saving allowed chat ID:', error);
+    return false;
+  }
+};
+
+// Function to remove allowed chat ID from Google Sheets
+const removeAllowedChatIdFromSheet = async (chatId: number): Promise<boolean> => {
+  try {
+    const response = await fetch(ALLOWED_CHAT_IDS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: String(chatId), action: 'disallow' }),
+    });
+    const result = await response.text();
+    return result === 'Removed';
+  } catch (error) {
+    debug('Error removing allowed chat ID:', error);
+    return false;
+  }
+};
 
 // Function to calculate similarity score between two strings
 const getSimilarityScore = (a: string, b: string): number => {
@@ -149,9 +198,11 @@ const createTelegraphPage = async (chapters: string[]) => {
         children: chapters.map(chapter => ({
           tag: 'li',
           children: [chapter],
-        })),
+        }),
       },
-      { tag: 'br' },
+      {
+
+ tag: 'br' },
       { tag: 'p', children: ['To get questions from a chapter, use:'] },
       { tag: 'code', children: ['/chapter [name] [count]'] },
       { tag: 'br' },
@@ -250,6 +301,8 @@ const sendQuiz = async (bot: Telegraf<Context>, ctx: Context | null, chatId?: nu
 
 // Automatic quiz sending function
 export const sendAutomaticQuizzes = async (bot: Telegraf<Context>) => {
+  // Sync allowed chat IDs from Google Sheets
+  allowedChatIds = await fetchAllowedChatIds();
   const chatIds = getAllChatIds().filter(id => allowedChatIds.includes(id));
   for (const chatId of chatIds) {
     try {
@@ -287,15 +340,21 @@ export const quizes = () => async (ctx: Context) => {
     }
 
     if (action === 'allow') {
-      if (!allowedChatIds.includes(chatId)) {
+      const saved = await saveAllowedChatIdToSheet(chatId);
+      if (saved) {
         allowedChatIds.push(chatId);
         await ctx.reply('Automatic quizzes enabled for this group. Quizzes will be sent every minute.');
       } else {
         await ctx.reply('Automatic quizzes are already enabled for this group.');
       }
     } else if (action === 'disallow') {
-      allowedChatIds = allowedChatIds.filter(id => id !== chatId);
-      await ctx.reply('Automatic quizzes disabled for this group.');
+      const removed = await removeAllowedChatIdFromSheet(chatId);
+      if (removed) {
+        allowedChatIds = allowedChatIds.filter(id => id !== chatId);
+        await ctx.reply('Automatic quizzes disabled for this group.');
+      } else {
+        await ctx.reply('Automatic quizzes are not enabled for this group.');
+      }
     }
     return;
   }
