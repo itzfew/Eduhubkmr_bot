@@ -2,368 +2,130 @@ import { Context } from 'telegraf';
 import createDebug from 'debug';
 import { distance } from 'fastest-levenshtein';
 
-const debug = createDebug('bot:quizes');
+const debug = createDebug('bot:autoquizes');
 
-let accessToken: string | null = null;
+// Store allowed chat IDs
+let chatIds: number[] = [];
 
-// Base URL for JSON files
+// Google Sheet URL
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzHPhcv79YQyIx6t-59fsc6Czm9WgL6Y4HOP2JgX4gJyi3KjZqbXOGY-zmpyceW32VI/exec';
+
+// JSON files for each subject
 const BASE_URL = 'https://raw.githubusercontent.com/itzfew/Eduhub-KMR/refs/heads/main/';
-
-// Subject-specific JSON file paths
 const JSON_FILES: Record<string, string> = {
   biology: `${BASE_URL}biology.json`,
   chemistry: `${BASE_URL}chemistry.json`,
   physics: `${BASE_URL}physics.json`,
 };
 
-// Function to calculate similarity score between two strings
+// === Utility Functions ===
+export const saveChatId = async (id: number) => {
+  if (!chatIds.includes(id)) {
+    chatIds.push(id);
+    // Save to Google Sheet
+    await fetch(`${SHEET_URL}?action=add&id=${id}`);
+  }
+};
+
+export const removeChatId = async (id: number) => {
+  chatIds = chatIds.filter(c => c !== id);
+  await fetch(`${SHEET_URL}?action=remove&id=${id}`);
+};
+
+export const fetchChatIdsFromSheet = async (): Promise<number[]> => {
+  try {
+    const response = await fetch(SHEET_URL);
+    const data = await response.json();
+    const ids = data.map((entry: any) => Number(entry.id)).filter((id: number) => !isNaN(id));
+    chatIds = ids;
+    return ids;
+  } catch (error) {
+    console.error('Failed to fetch chat IDs from Google Sheet:', error);
+    return [];
+  }
+};
+
 const getSimilarityScore = (a: string, b: string): number => {
   const maxLength = Math.max(a.length, b.length);
   if (maxLength === 0) return 1.0;
   return (maxLength - distance(a, b)) / maxLength;
 };
 
-// Function to find best matching chapter using fuzzy search
-const findBestMatchingChapter = (chapters: string[], query: string): string | null => {
-  if (!query || !chapters.length) return null;
-  
-  // First try exact match (case insensitive)
-  const exactMatch = chapters.find(ch => ch.toLowerCase() === query.toLowerCase());
-  if (exactMatch) return exactMatch;
-
-  // Then try contains match
-  const containsMatch = chapters.find(ch => 
-    ch.toLowerCase().includes(query.toLowerCase()) || 
-    query.toLowerCase().includes(ch.toLowerCase())
-  );
-  if (containsMatch) return containsMatch;
-
-  // Then try fuzzy matching
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  
-  let bestMatch: string | null = null;
-  let bestScore = 0.5; // Minimum threshold
-
-  for (const chapter of chapters) {
-    const chapterWords = chapter.toLowerCase().split(/\s+/);
-    
-    // Calculate word overlap score
-    const matchingWords = queryWords.filter(qw => 
-      chapterWords.some(cw => getSimilarityScore(qw, cw) > 0.7)
-    );
-    
-    const overlapScore = matchingWords.length / Math.max(queryWords.length, 1);
-    
-    // Calculate full string similarity
-    const fullSimilarity = getSimilarityScore(chapter.toLowerCase(), query.toLowerCase());
-    
-    // Combined score (weighted towards overlap)
-    const totalScore = (overlapScore * 0.7) + (fullSimilarity * 0.3);
-    
-    if (totalScore > bestScore) {
-      bestScore = totalScore;
-      bestMatch = chapter;
+// Fetch questions (all or per subject)
+const fetchQuestions = async (subject?: string): Promise<any[]> => {
+  try {
+    if (subject) {
+      const response = await fetch(JSON_FILES[subject]);
+      return await response.json();
+    } else {
+      const allQuestions: any[] = [];
+      for (const subj of Object.keys(JSON_FILES)) {
+        const res = await fetch(JSON_FILES[subj]);
+        allQuestions.push(...(await res.json()));
+      }
+      return allQuestions;
     }
+  } catch (err) {
+    debug('Error fetching questions:', err);
+    return [];
   }
-
-  return bestMatch;
 };
 
-const quizes = () => async (ctx: Context) => {
-  debug('Triggered "quizes" handler');
+// Pick a random quiz
+const getRandomQuiz = async () => {
+  const allQuestions = await fetchQuestions();
+  if (!allQuestions.length) return null;
+  const question = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+  return question;
+};
 
-  if (!ctx.message || !('text' in ctx.message)) return;
+// Send quiz to one chat
+const sendQuizToChat = async (ctx: Context, chatId: number) => {
+  const question = await getRandomQuiz();
+  if (!question) return;
 
-  const text = ctx.message.text.trim().toLowerCase();
-  const chapterMatch = text.match(/^\/chapter\s+(.+?)(?:\s+(\d+))?$/);
-  const cmdMatch = text.match(/^\/(pyq(b|c|p)?|[bcp]1)(\s*\d+)?$/);
+  const options = [
+    question.options.A,
+    question.options.B,
+    question.options.C,
+    question.options.D
+  ];
+  const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
 
-  // Function to create a Telegraph account
-  const createTelegraphAccount = async () => {
-    try {
-      const res = await fetch('https://api.telegra.ph/createAccount', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          short_name: 'EduHubBot',
-          author_name: 'EduHub Bot',
-          author_url: 'https://t.me/neetpw01',
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        accessToken = data.result.access_token;
-        debug('Telegraph account created successfully');
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      debug('Error creating Telegraph account:', err);
-      throw err;
+  if (question.image) {
+    await ctx.telegram.sendPhoto(chatId, { url: question.image });
+  }
+
+  await ctx.telegram.sendPoll(chatId, question.question, options, {
+    type: 'quiz',
+    correct_option_id: correctOptionIndex,
+    is_anonymous: false,
+    explanation: question.explanation || 'No explanation provided.'
+  });
+};
+
+// Start auto-sending quiz every 1 minute
+export const startAutoQuiz = (ctx: Context) => {
+  setInterval(async () => {
+    for (const chatId of chatIds) {
+      await sendQuizToChat(ctx, chatId);
     }
-  };
+  }, 60_000);
+};
 
-  // Function to fetch questions for a specific subject or all subjects
-  const fetchQuestions = async (subject?: string): Promise<any[]> => {
-    try {
-      if (subject) {
-        // Fetch questions for a specific subject
-        const response = await fetch(JSON_FILES[subject]);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${subject} questions: ${response.statusText}`);
-        }
-        return await response.json();
-      } else {
-        // Fetch questions from all subjects
-        const subjects = Object.keys(JSON_FILES);
-        const allQuestions: any[] = [];
-        for (const subj of subjects) {
-          const response = await fetch(JSON_FILES[subj]);
-          if (!response.ok) {
-            debug(`Failed to fetch ${subj} questions: ${response.statusText}`);
-            continue;
-          }
-          const questions = await response.json();
-          allQuestions.push(...questions);
-        }
-        return allQuestions;
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
-      throw err;
-    }
-  };
-
-  // Function to get unique chapters
-  const getUniqueChapters = (questions: any[]) => {
-    const chapters = new Set(questions.map((q: any) => q.chapter?.trim()));
-    return Array.from(chapters).filter(ch => ch).sort();
-  };
-
-  // Function to create a Telegraph page with chapters list
-  const createTelegraphPage = async (chapters: string[]) => {
-    try {
-      if (!accessToken) {
-        await createTelegraphAccount();
-      }
-
-      const now = new Date();
-      const dateTimeString = now.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short',
-      });
-
-      let content = [
-        { tag: 'h4', children: ['📚 Available Chapters'] },
-        { tag: 'br' },
-        { tag: 'p', children: [{ tag: 'i', children: [`Last updated: ${dateTimeString}`] }] },
-        { tag: 'br' },
-        {
-          tag: 'ul',
-          children: chapters.map(chapter => ({
-            tag: 'li',
-            children: [chapter],
-          })),
-        },
-        { tag: 'br' },
-        { tag: 'p', children: ['To get questions from a chapter, use:'] },
-        { tag: 'code', children: ['/chapter [name] [count]'] },
-        { tag: 'br' },
-        { tag: 'p', children: ['Example:'] },
-        { tag: 'code', children: ['/chapter living world 2'] },
-      ];
-
-      const res = await fetch('https://api.telegra.ph/createPage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          access_token: accessToken,
-          title: `EduHub Chapters - ${dateTimeString}`,
-          author_name: 'EduHub Bot',
-          author_url: 'https://t.me/your_bot_username',
-          content: content,
-          return_content: false,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        return data.result.url;
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      debug('Error creating Telegraph page:', err);
-      throw err;
-    }
-  };
-
-  // Function to generate chapters list message with Telegraph link
-  const getChaptersMessage = async () => {
-    try {
-      const allQuestions = await fetchQuestions();
-      const chapters = getUniqueChapters(allQuestions);
-
-      const telegraphUrl = await createTelegraphPage(chapters);
-      return {
-        message: `📚 <b>Available Chapters</b>\n\n` +
-          `View all chapters here: <a href="${telegraphUrl}">${telegraphUrl}</a>\n\n` +
-          `Then use: <code>/chapter [name] [count]</code>\n` +
-          `Example: <code>/chapter living world 2</code>`,
-        chapters,
-      };
-    } catch (err) {
-      debug('Error generating chapters message:', err);
-      throw err;
-    }
-  };
-
-  // Handle /chapter command
-  if (chapterMatch) {
-    const chapterQuery = chapterMatch[1].trim();
-    const count = chapterMatch[2] ? parseInt(chapterMatch[2], 10) : 1;
-
-    try {
-      const allQuestions = await fetchQuestions();
-      const chapters = getUniqueChapters(allQuestions);
-      
-      // Find the best matching chapter using fuzzy search
-      const matchedChapter = findBestMatchingChapter(chapters, chapterQuery);
-      
-      if (!matchedChapter) {
-        const { message } = await getChaptersMessage();
-        await ctx.replyWithHTML(
-          `❌ No matching chapter found for "<b>${chapterQuery}</b>"\n\n${message}`
-        );
-        return;
-      }
-
-      const filteredByChapter = allQuestions.filter(
-        (q: any) => q.chapter?.trim() === matchedChapter
-      );
-
-      if (!filteredByChapter.length) {
-        const { message } = await getChaptersMessage();
-        await ctx.replyWithHTML(
-          `❌ No questions found for chapter "<b>${matchedChapter}</b>"\n\n${message}`
-        );
-        return;
-      }
-
-      // If the matched chapter isn't an exact match, confirm with user
-      if (matchedChapter.toLowerCase() !== chapterQuery.toLowerCase()) {
-        await ctx.replyWithHTML(
-          `🔍 Did you mean "<b>${matchedChapter}</b>"?\n\n` +
-          `Sending questions from this chapter...\n` +
-          `(If this isn't correct, please try again with a more specific chapter name)`
-        );
-      }
-
-      const shuffled = filteredByChapter.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(count, filteredByChapter.length));
-
-      if (!selected.length) {
-        await ctx.reply(`No questions available for chapter "${matchedChapter}".`);
-        return;
-      }
-
-      for (const question of selected) {
-        const options = [
-          question.options.A,
-          question.options.B,
-          question.options.C,
-          question.options.D
-        ];
-        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-        
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
-        }
-        
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
-      await ctx.reply('Oops! Failed to load questions.');
-    }
+// === Command Handlers ===
+export const quizCommands = () => async (ctx: Context) => {
+  const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim().toLowerCase() : '';
+  
+  if (text === '/quiz allow') {
+    await saveChatId(ctx.chat!.id);
+    await ctx.reply('✅ This group is now allowed to receive automatic quizzes every minute.');
     return;
   }
 
-  // Handle /pyq, /b1, /c1, /p1 commands
-  if (cmdMatch) {
-    const cmd = cmdMatch[1]; // pyq, pyqb, pyqc, pyqp, b1, c1, p1
-    const subjectCode = cmdMatch[2]; // b, c, p
-    const count = cmdMatch[3] ? parseInt(cmdMatch[3].trim(), 10) : 1;
-
-    const subjectMap: Record<string, string> = {
-      b: 'biology',
-      c: 'chemistry',
-      p: 'physics',
-    };
-    
-    let subject: string | null = null;
-    let isMixed = false;
-    
-    if (cmd === 'pyq') {
-      isMixed = true;
-    } else if (subjectCode) {
-      subject = subjectMap[subjectCode];
-    } else if (['b1', 'c1', 'p1'].includes(cmd)) {
-      subject = subjectMap[cmd[0]];
-    }
-
-    try {
-      const filtered = isMixed ? await fetchQuestions() : await fetchQuestions(subject!);
-      
-      if (!filtered.length) {
-        await ctx.reply(`No questions available for ${subject || 'the selected subjects'}.`);
-        return;
-      }
-
-      const shuffled = filtered.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(count, filtered.length));
-
-      for (const question of selected) {
-        const options = [
-          question.options.A,
-          question.options.B,
-          question.options.C,
-          question.options.D
-        ];
-        const correctOptionIndex = ['A', 'B', 'C', 'D'].indexOf(question.correct_option);
-        
-        if (question.image) {
-          await ctx.replyWithPhoto({ url: question.image });
-        }
-        
-        await ctx.sendPoll(
-          question.question,
-          options,
-          {
-            type: 'quiz',
-            correct_option_id: correctOptionIndex,
-            is_anonymous: false,
-            explanation: question.explanation || 'No explanation provided.',
-          } as any
-        );
-      }
-    } catch (err) {
-      debug('Error fetching questions:', err);
-      await ctx.reply('Oops! Failed to load questions.');
-    }
+  if (text === '/quiz disallow') {
+    await removeChatId(ctx.chat!.id);
+    await ctx.reply('❌ This group will no longer receive automatic quizzes.');
+    return;
   }
 };
-
-export { quizes };
