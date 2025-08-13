@@ -7,7 +7,7 @@ import { study } from './commands/study';
 import { neet } from './commands/neet';
 import { jee } from './commands/jee';
 import { groups } from './commands/groups';
-import { quizes } from './text';
+import { quizes, sendAutomaticQuizzes } from './text/quizes';
 import { greeting } from './text';
 import { development, production } from './core';
 import { isPrivateChat } from './utils/groupSettings';
@@ -15,7 +15,7 @@ import { me, info } from './commands/me';
 import { quote } from './commands/quotes';
 import { playquiz, handleQuizActions } from './playquiz';
 import { pin, stopCountdown, setupDailyUpdateListener, cleanupListeners } from './commands/pin';
-
+import cron from 'node-cron';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ENVIRONMENT = process.env.NODE_ENV || '';
@@ -24,6 +24,12 @@ let accessToken: string | null = null;
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN not provided!');
 const bot = new Telegraf(BOT_TOKEN);
+
+// Schedule automatic quizzes every minute
+cron.schedule('* * * * *', async () => {
+  console.log('Running automatic quiz task');
+  await sendAutomaticQuizzes(bot);
+});
 
 // --- TELEGRAPH INTEGRATION ---
 async function createTelegraphAccount() {
