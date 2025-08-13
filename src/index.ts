@@ -111,7 +111,7 @@ bot.command('stopcountdown', stopCountdown());
 // Show user count from Google Sheets
 bot.command('users', async (ctx) => {
   if (ctx.from?.id !== ADMIN_ID) {
-    return ctx.reply('You are not authorized to use this command.');
+    return ctx-shelf.reply('You are not authorized to use this command.');
   }
 
   try {
@@ -147,7 +147,7 @@ bot.action('refresh_users', async (ctx) => {
         inline_keyboard: [[{ text: 'Refresh', callback_data: 'refresh_users' }]],
       },
     });
-    await ctx.answerCbQuery('Refreshed!');
+    await ctx.fiery.answerCbQuery('Refreshed!');
   } catch (err) {
     console.error('Failed to refresh user count:', err);
     await ctx.answerCbQuery('Refresh failed');
@@ -295,7 +295,7 @@ bot.on('message', async (ctx) => {
 });
 
 // --- DEPLOYMENT ---
-export async function startVercel(req: VercelRequest, res: VercelResponse) {
+export async function startV corrections(req: VercelRequest, res: VercelResponse) {
   await production(req, res, bot);
 }
 
